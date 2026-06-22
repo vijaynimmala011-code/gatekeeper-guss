@@ -1,0 +1,1609 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>GATEKEEPER GUS — A Cat-and-Mouse Caper</title>
+<style>
+  :root { --ink:#1d130a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#0b1026; touch-action:none; overscroll-behavior:none; }
+  body { font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; color:#fff; -webkit-font-smoothing:antialiased; user-select:none; }
+  #app { position:fixed; inset:0; }
+  canvas { display:block; }
+
+  /* ---------- HUD ---------- */
+  #ui { position:fixed; inset:0; pointer-events:none; z-index:10; }
+  .panel { position:absolute; padding:8px 12px; border-radius:14px;
+    background:rgba(20,12,30,0.42); backdrop-filter:blur(3px);
+    border:1px solid rgba(255,255,255,0.14); box-shadow:0 4px 18px rgba(0,0,0,0.35); }
+
+  #hunger { top:14px; left:14px; min-width:210px; }
+  #hunger .row { display:flex; align-items:center; gap:8px; font-weight:700; letter-spacing:.5px; font-size:13px; }
+  #hungerTrack { margin-top:7px; height:13px; width:100%; border-radius:8px; background:rgba(0,0,0,0.4);
+    overflow:hidden; border:1px solid rgba(255,255,255,0.18); }
+  #hungerFill { height:100%; width:40%; border-radius:8px;
+    background:linear-gradient(90deg,#ffd34d,#ff8a3c); transition:background .25s; }
+  #hunger.hangry #hungerFill { background:linear-gradient(90deg,#9bff6b,#36c46a); }
+  #hunger.hangry { box-shadow:0 0 22px rgba(90,220,110,0.55); border-color:rgba(120,255,140,0.6); }
+  #hungerTag { font-size:11px; opacity:.0; color:#b8ff9a; transition:opacity .2s; }
+  #hunger.hangry #hungerTag { opacity:1; }
+
+  #lives { top:14px; right:14px; font-size:24px; letter-spacing:4px; }
+  #lives .pip { filter:drop-shadow(0 2px 3px rgba(0,0,0,.5)); transition:opacity .3s, filter .3s; }
+  #lives .pip.lost { opacity:.22; filter:grayscale(1); }
+
+  #score { top:64px; right:14px; font-size:13px; font-weight:700; text-align:right; opacity:.92; }
+
+  #banner { top:78px; left:50%; transform:translateX(-50%); font-weight:900; letter-spacing:2px;
+    font-size:22px; text-align:center; text-shadow:0 3px 0 rgba(0,0,0,.4); opacity:0; transition:opacity .4s;
+    background:rgba(20,12,30,0.35); padding:8px 20px; border-radius:30px; border:1px solid rgba(255,255,255,.12); }
+  #banner small { display:block; font-size:12px; font-weight:600; letter-spacing:3px; opacity:.8; margin-top:2px; }
+
+  /* gate-open countdown */
+  #gateOpen { top:50%; left:50%; transform:translate(-50%,-50%); display:none; text-align:center; }
+  #ring { width:118px; height:118px; border-radius:50%; margin:0 auto;
+    background:conic-gradient(#7CFFB2 var(--p,100%), rgba(0,0,0,0.35) 0); padding:9px; }
+  #ringInner { width:100%; height:100%; border-radius:50%; background:rgba(10,8,20,0.55);
+    display:flex; align-items:center; justify-content:center; font-size:34px; font-weight:900; color:#eafff0;
+    text-shadow:0 0 14px rgba(120,255,170,.7); }
+  #gateOpen .lbl { margin-top:10px; font-weight:900; letter-spacing:3px; font-size:20px; color:#aaffc8;
+    text-shadow:0 0 16px rgba(80,255,150,.7); animation:pulse .5s infinite alternate; }
+  @keyframes pulse { from{transform:scale(1)} to{transform:scale(1.07)} }
+
+  /* tricks bar */
+  #tricks { bottom:16px; left:50%; transform:translateX(-50%); display:flex; gap:10px; padding:8px 10px; }
+  .trick { position:relative; width:74px; height:50px; border-radius:11px; overflow:hidden;
+    background:rgba(0,0,0,0.32); border:1px solid rgba(255,255,255,0.16);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:10px; font-weight:800; letter-spacing:.5px; }
+  .trick .key { font-size:15px; }
+  .trick.disabled { opacity:.4; }
+  .trick .cool { position:absolute; left:0; bottom:0; width:100%; background:rgba(0,0,0,0.55); height:0%; }
+  .trick.hot { box-shadow:0 0 16px rgba(255,210,90,.6); border-color:rgba(255,220,120,.7); }
+
+  /* tutorial / center toasts */
+  #toast { bottom:92px; left:50%; transform:translateX(-50%); max-width:520px; text-align:center;
+    font-size:15px; font-weight:700; opacity:0; transition:opacity .35s;
+    background:rgba(20,12,30,0.55); padding:11px 20px; border-radius:16px; border:1px solid rgba(255,255,255,.14); }
+
+  /* speech bubbles */
+  .bubble { position:absolute; transform:translate(-50%,-100%); padding:6px 11px; border-radius:14px;
+    font-size:13px; font-weight:800; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s;
+    color:var(--ink); box-shadow:0 4px 10px rgba(0,0,0,.35); }
+  .bubble::after { content:""; position:absolute; left:50%; bottom:-7px; transform:translateX(-50%);
+    border:7px solid transparent; border-top-color:inherit; }
+  #bubGus { background:#ffe27a; border-top-color:#ffe27a; }
+  #bubGus::after { border-top-color:#ffe27a; }
+  #bubMouse { background:#cfe3ff; border-top-color:#cfe3ff; }
+  #bubMouse::after { border-top-color:#cfe3ff; }
+
+  /* muck overlay & vignette */
+  #muck { position:fixed; inset:0; z-index:20; pointer-events:none; opacity:0;
+    background:
+      radial-gradient(circle at 30% 35%, rgba(74,60,30,0.0) 0%, rgba(58,44,22,0.85) 60%, rgba(40,28,14,0.96) 100%),
+      radial-gradient(circle at 68% 60%, rgba(90,76,40,0.5), rgba(0,0,0,0) 45%); }
+  #muck .drip { position:absolute; border-radius:50%; background:rgba(40,28,12,0.9);
+    box-shadow:0 0 30px rgba(30,20,8,0.8); filter:blur(2px); }
+  #vignette { position:fixed; inset:0; z-index:15; pointer-events:none;
+    box-shadow:inset 0 0 220px rgba(0,0,0,0.0); transition:box-shadow .6s; }
+
+  /* full-screen overlays (title / win / lose / pause) */
+  .screen { position:fixed; inset:0; z-index:40; display:none; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; pointer-events:auto; padding:24px;
+    background:radial-gradient(circle at 50% 30%, rgba(28,18,44,0.72), rgba(6,8,20,0.93)); }
+  .screen.show { display:flex; }
+  .screen h1 { font-size:min(13vw,72px); font-weight:900; letter-spacing:1px; line-height:.95;
+    background:linear-gradient(180deg,#fff,#ffd479); -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 6px 0 rgba(0,0,0,.25); }
+  .screen h2 { font-size:min(8vw,40px); font-weight:900; margin-bottom:6px; }
+  .screen p { max-width:560px; font-size:16px; line-height:1.5; opacity:.92; margin:8px 0; }
+  .screen .sub { font-size:14px; opacity:.7; letter-spacing:2px; text-transform:uppercase; margin-bottom:8px; }
+  .screen .stats { font-size:15px; opacity:.85; margin:10px 0; font-weight:700; }
+  .btn { pointer-events:auto; cursor:pointer; margin-top:18px; padding:14px 34px; font-size:18px; font-weight:900;
+    letter-spacing:1px; color:#241500; border:none; border-radius:40px;
+    background:linear-gradient(180deg,#ffe27a,#ffae3c); box-shadow:0 6px 0 #b9742a, 0 10px 22px rgba(0,0,0,.4);
+    transition:transform .08s, box-shadow .08s; }
+  .btn:hover { transform:translateY(-1px); }
+  .btn:active { transform:translateY(4px); box-shadow:0 2px 0 #b9742a, 0 4px 10px rgba(0,0,0,.4); }
+  .btn.alt { background:linear-gradient(180deg,#cfe3ff,#7fb0ff); box-shadow:0 6px 0 #3f6ec0, 0 10px 22px rgba(0,0,0,.4); }
+  .row2 { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
+  .keys { margin-top:18px; font-size:13px; letter-spacing:2px; opacity:.72; }
+  .keys b { color:#ffd479; }
+  .tip { margin-top:14px; font-size:14px; color:#9bff9b; animation:blink 1.2s infinite; }
+  @keyframes blink { 50%{opacity:.35} }
+  .cat-emoji { font-size:64px; margin-bottom:4px; filter:drop-shadow(0 6px 6px rgba(0,0,0,.5)); }
+  #pauseScreen { background:rgba(6,8,20,0.6); }
+  #loading { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
+    background:#0b1026; color:#ffd479; font-weight:800; letter-spacing:3px; font-size:18px; }
+  .credit { position:fixed; bottom:8px; left:0; right:0; text-align:center; font-size:11px; opacity:.4; z-index:41; }
+
+  /* ---------- touch controls (shown only on touch devices) ---------- */
+  #touchControls { display:none; }
+  body.touch #touchControls { display:block; }
+  body.touch #tricks { display:none; }       /* desktop status bar redundant on touch */
+  body.touch .credit { display:none; }
+  body.touch .keys { display:none; }
+  body.touch #touchHint { display:block; }
+  #touchHint { display:none; margin-top:14px; font-size:14px; letter-spacing:1px; opacity:.8; }
+  #touchHint b { color:#ffd479; }
+
+  #joyBase { position:fixed; width:128px; height:128px; border-radius:50%; z-index:30;
+    background:radial-gradient(circle, rgba(255,255,255,0.10), rgba(255,255,255,0.03));
+    border:2px solid rgba(255,255,255,0.28); transform:translate(-50%,-50%); display:none; pointer-events:none; }
+  #joyThumb { position:absolute; left:50%; top:50%; width:58px; height:58px; border-radius:50%;
+    background:rgba(255,236,150,0.5); border:2px solid rgba(255,255,255,0.6); transform:translate(-50%,-50%);
+    box-shadow:0 2px 10px rgba(0,0,0,.4); }
+
+  #touchBtns { position:fixed; right:20px; bottom:30px; display:flex; flex-direction:column-reverse;
+    align-items:center; gap:16px; z-index:31; }
+  .touchbtn { -webkit-tap-highlight-color:transparent; touch-action:none; pointer-events:auto; cursor:pointer;
+    width:70px; height:70px; border-radius:50%; border:2px solid rgba(255,255,255,0.3); color:#fff;
+    background:rgba(20,12,30,0.55); backdrop-filter:blur(3px);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:26px; line-height:1; }
+  .touchbtn small { font-size:9px; font-weight:800; letter-spacing:1px; opacity:.85; margin-top:2px; }
+  .touchbtn:active { transform:scale(0.92); }
+  .touchbtn.big { width:92px; height:92px; font-size:34px;
+    background:radial-gradient(circle, rgba(255,170,60,0.5), rgba(255,120,30,0.35)); border-color:rgba(255,210,120,0.7); }
+  .touchbtn.disabled { opacity:.32; }
+  .touchbtn.hot { box-shadow:0 0 20px rgba(120,255,140,.75); border-color:rgba(120,255,140,.85); }
+  .touchbtn.cooling { opacity:.45; }
+  #btnPause { position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:31;
+    width:46px; height:46px; font-size:18px; }
+
+  /* responsive HUD for small / portrait screens */
+  @media (max-width:560px) {
+    #hunger { min-width:150px; padding:6px 10px; }
+    #hunger .row { font-size:11px; }
+    #lives { font-size:20px; letter-spacing:2px; }
+    #score { font-size:11px; top:58px; }
+    #banner { font-size:17px; top:64px; padding:6px 14px; }
+    #banner small { font-size:10px; }
+    #toast { font-size:13px; max-width:88vw; bottom:130px; padding:9px 14px; }
+    #ring { width:96px; height:96px; }
+    #ringInner { font-size:28px; }
+    .screen h1 { font-size:15vw; }
+    .screen p { font-size:14px; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="loading">WAKING UP GUS…</div>
+
+<div id="ui">
+  <div id="hunger" class="panel">
+    <div class="row"><span>🥪 GUS</span><span id="hungerTag">HANGRY!</span></div>
+    <div id="hungerTrack"><div id="hungerFill"></div></div>
+  </div>
+  <div id="lives" class="panel"></div>
+  <div id="score" class="panel">SCORE 0</div>
+  <div id="banner"></div>
+  <div id="gateOpen">
+    <div id="ring"><div id="ringInner">2.0</div></div>
+    <div class="lbl">GATE OPEN — DASH!</div>
+  </div>
+  <div id="tricks" class="panel">
+    <div class="trick" id="tFood"><span class="key">E</span><span>FOOD</span><div class="cool"></div></div>
+    <div class="trick" id="tDash"><span class="key">⇧</span><span>DASH</span><div class="cool"></div></div>
+    <div class="trick disabled" id="tDecoy"><span class="key">Q</span><span>DECOY</span><div class="cool"></div></div>
+  </div>
+  <div id="toast"></div>
+  <div class="bubble" id="bubGus"></div>
+  <div class="bubble" id="bubMouse"></div>
+</div>
+
+<div id="vignette"></div>
+<div id="muck"></div>
+
+<!-- on-screen touch controls (mobile) -->
+<div id="touchControls">
+  <div id="joyBase"><div id="joyThumb"></div></div>
+  <div id="touchBtns">
+    <button class="touchbtn big" id="btnDash" aria-label="Dash">⚡<small>DASH</small></button>
+    <button class="touchbtn" id="btnFood" aria-label="Food">🐟<small>FOOD</small></button>
+    <button class="touchbtn disabled" id="btnDecoy" aria-label="Decoy">📦<small>DECOY</small></button>
+  </div>
+  <button class="touchbtn" id="btnPause" aria-label="Pause">⏸</button>
+</div>
+
+<!-- Title -->
+<div class="screen show" id="titleScreen">
+  <div class="cat-emoji">🐱</div>
+  <h1>GATEKEEPER GUS</h1>
+  <div class="sub">a cat-and-mouse caper</div>
+  <p>Catch the smug mouse hiding behind the gate. The only way in: wait for the hippo to get <b>HANGRY</b>, lob him a snack, and <b>dash</b> through the open gate during his 2-second munch. Get noticed and he tail-splashes the whole yard with swamp muck.</p>
+  <button class="btn" id="startBtn">SNEAK IN</button>
+  <div class="keys"><b>WASD / Arrows</b> move · <b>E</b> food · <b>SHIFT / SPACE</b> dash · <b>Q</b> decoy · right-drag look</div>
+  <div id="touchHint"><b>Left thumb</b> to move (push gently to creep) · <b>buttons</b> to act · drag the right side to look</div>
+  <div class="tip">Psst — the gate only opens while Gus is EATING.</div>
+</div>
+
+<!-- Win -->
+<div class="screen" id="winScreen">
+  <div class="cat-emoji">🐭</div>
+  <h2 id="winTitle">GOTCHA!</h2>
+  <p id="winText">You caught the mouse. Gus is FURIOUS.</p>
+  <div class="stats" id="winStats"></div>
+  <div class="row2">
+    <button class="btn" id="nextBtn">NEXT YARD</button>
+    <button class="btn alt" id="againBtn">AGAIN</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="screen" id="overScreen">
+  <div class="cat-emoji">💩</div>
+  <h2>NOT TODAY, WHISKERS.</h2>
+  <p id="overText">Fully mucked. You are 90% swamp now.</p>
+  <div class="stats" id="overStats"></div>
+  <button class="btn" id="retryBtn">TRY AGAIN</button>
+</div>
+
+<!-- Pause -->
+<div class="screen" id="pauseScreen">
+  <h2>PAUSED</h2>
+  <p>Gus is also taking a break.</p>
+  <div class="row2">
+    <button class="btn" id="resumeBtn">RESUME</button>
+    <button class="btn alt" id="restartBtn">RESTART LEVEL</button>
+  </div>
+</div>
+
+<div class="credit">Built with Three.js · WASD move · E food · SHIFT dash · ESC pause · R retry</div>
+
+<script type="module">
+// Three.js r160 loaded directly from CDN (no build step, no importmap needed)
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+/* =====================================================================
+   GATEKEEPER GUS — single-file 3D game
+   ===================================================================== */
+
+// ---------- math helpers ----------
+const PI = Math.PI, TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const rand = (a, b) => a + Math.random() * (b - a);
+const d2r = d => d * PI / 180;
+const smoothstep = t => t * t * (3 - 2 * t);
+// frame-rate independent exponential approach
+const expt = (dt, smoothTime) => 1 - Math.exp(-dt / smoothTime);
+function moveToward(a, b, maxDelta) { const d = b - a; return Math.abs(d) <= maxDelta ? b : a + Math.sign(d) * maxDelta; }
+function lerpAngle(a, b, t) { let d = ((b - a) % TAU + TAU + PI) % TAU - PI; return a + d * t; }
+
+// ---------- tuning constants ----------
+const RUN = 6.5, ACCEL = 45, FRICTION = 60;
+const DASH_SPEED = 13, DASH_TIME = 0.35, DASH_CD = 0.65;
+const GATE_Z = 14, GUS_Z = 13, MOUSE_Z = 16.5, BOWL = new THREE.Vector3(8, 0, -6);
+const SPAWN = new THREE.Vector3(0, 0, -10);
+const RING = 9, PUNISH = 4.5, SUSPICION = 0.20, SPEED_THRESH = 2;
+const SPLASH_DUR = 0.40, RECOVER_DUR = 0.30, EAT_DUR = 2.0;
+const HUNGRY_AT = 30, START_HUNGER = 40, FEED_RANGE = 14;
+const GATE_GRACE = 0.3, IFRAME = 0.6, LOCKOUT = 0.35, KNOCK = 16;
+const LIVES_MAX = 3;
+
+const LEVELS = [
+  { name: 'THE SLEEPY YARD',  sky: 0x8fd3f0, fog: 0xa9dbef, fogNear: 18, fogFar: 60,
+    grass: 0x4a6a2f, accent: 0x6f9a3a, coneHalf: d2r(50), coneRange: 10, turnWindup: 0.60,
+    hungerDrain: 6, randomSplash: null, hemi: 1.0, sun: 1.15, sunColor: 0xfff2d0, decoy: false },
+  { name: "MUCK O'CLOCK",     sky: 0xc7763e, fog: 0xb0703f, fogNear: 14, fogFar: 52,
+    grass: 0x5a5226, accent: 0x7a6e2e, coneHalf: d2r(55), coneRange: 11, turnWindup: 0.50,
+    hungerDrain: 8, randomSplash: [6, 9], hemi: 0.7, sun: 1.0, sunColor: 0xffb060, decoy: true },
+  { name: 'THE NIGHT SHIFT',  sky: 0x0b1026, fog: 0x0e1530, fogNear: 10, fogFar: 44,
+    grass: 0x1c3326, accent: 0x274536, coneHalf: d2r(60), coneRange: 12, turnWindup: 0.42,
+    hungerDrain: 10, randomSplash: [4, 6], hemi: 0.35, sun: 0.5, sunColor: 0xaec6ff, decoy: true, night: true },
+];
+
+// =====================================================================
+//  RENDERER / SCENE / CAMERA
+// =====================================================================
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 6, -18);
+
+// lights (created once, retuned per level)
+const hemi = new THREE.HemisphereLight(0xffffff, 0x444422, 1.0);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+sun.position.set(-10, 18, -6);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 70;
+sun.shadow.camera.left = -28; sun.shadow.camera.right = 28;
+sun.shadow.camera.top = 28; sun.shadow.camera.bottom = -28;
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+scene.add(sun.target);
+const moonRim = new THREE.DirectionalLight(0x6f8bdf, 0.0);
+moonRim.position.set(12, 10, 18);
+scene.add(moonRim);
+
+// =====================================================================
+//  MATERIAL HELPERS
+// =====================================================================
+const mat = (color, rough = 0.85, opts = {}) =>
+  new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0, ...opts });
+
+const M = {
+  fur: mat(0xf4a23b, 0.95),
+  furBelly: mat(0xfff3e0, 0.95),
+  pink: mat(0xff9eb5, 0.8),
+  dark: mat(0x141414, 0.5, { emissive: 0x000000 }),
+  eyeW: mat(0xffffff, 0.4, { emissive: 0x222222 }),
+  hippo: mat(0x8a6fb0, 0.35),
+  hippoBelly: mat(0xd8c8e8, 0.4),
+  mouthIn: mat(0xc44b6e, 0.6),
+  teeth: mat(0xfffbe8, 0.4, { emissive: 0x222018 }),
+  mGrey: mat(0xb9c0c8, 0.9),
+  wood: mat(0x6b4f2e, 0.9),
+  woodDark: mat(0x3c2c18, 0.9),
+  fish: mat(0xbfe3ff, 0.5, { emissive: 0x224455, emissiveIntensity: 0.4 }),
+  rock: mat(0x5a5a5a, 1.0, { flatShading: true }),
+  reed: mat(0x4a5d33, 0.95),
+  lily: mat(0x5a9a4e, 0.7),
+  muckPud: mat(0x55401f, 0.5),
+  cardboard: mat(0xc8a36b, 1.0),
+};
+const groundMat = mat(0x4a6a2f, 1.0);
+
+// shared small geometries
+const G = {
+  eyeW: new THREE.SphereGeometry(0.07, 12, 12),
+  pupil: new THREE.SphereGeometry(0.038, 8, 8),
+};
+
+// =====================================================================
+//  ARENA
+// =====================================================================
+const arena = new THREE.Group();
+scene.add(arena);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), groundMat);
+ground.rotation.x = -PI / 2;
+ground.receiveShadow = true;
+arena.add(ground);
+
+// pen ground (behind gate) — a slightly different patch
+const pen = new THREE.Mesh(new THREE.CircleGeometry(7, 24), mat(0x3f5a2c, 1.0));
+pen.rotation.x = -PI / 2;
+pen.position.set(0, 0.01, MOUSE_Z);
+pen.receiveShadow = true;
+arena.add(pen);
+
+// decorative scatter (reeds, rocks, puddles, lily pads)
+const decor = new THREE.Group();
+arena.add(decor);
+function scatter() {
+  // reeds
+  for (let i = 0; i < 22; i++) {
+    const h = rand(1.1, 2.0);
+    const r = new THREE.Mesh(new THREE.ConeGeometry(0.04, h, 5), M.reed);
+    const a = rand(0, TAU), d = rand(9, 22);
+    r.position.set(Math.cos(a) * d, h / 2, Math.sin(a) * d - 2);
+    r.rotation.z = rand(-0.15, 0.15);
+    r.castShadow = true;
+    decor.add(r);
+  }
+  // rocks
+  for (let i = 0; i < 9; i++) {
+    const s = rand(0.3, 0.7);
+    const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(s, 0), M.rock);
+    rock.position.set(rand(-16, 16), s * 0.45, rand(-15, 9));
+    rock.rotation.set(rand(0, PI), rand(0, PI), rand(0, PI));
+    rock.castShadow = true; rock.receiveShadow = true;
+    decor.add(rock);
+  }
+  // muck puddles + lily pads
+  for (let i = 0; i < 7; i++) {
+    const pud = new THREE.Mesh(new THREE.CircleGeometry(rand(0.7, 1.5), 18), M.muckPud);
+    pud.rotation.x = -PI / 2;
+    pud.position.set(rand(-15, 15), 0.012, rand(-14, 8));
+    decor.add(pud);
+    if (Math.random() < 0.6) {
+      const lp = new THREE.Mesh(new THREE.CircleGeometry(rand(0.3, 0.5), 14), M.lily);
+      lp.rotation.x = -PI / 2;
+      lp.position.set(pud.position.x + rand(-0.4, 0.4), 0.02, pud.position.z + rand(-0.4, 0.4));
+      decor.add(lp);
+    }
+  }
+}
+scatter();
+
+// low berm walls (visual boundary)
+const berm = new THREE.Group();
+arena.add(berm);
+function bermWall(x, z, w, d) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.7, d), mat(0x3a2c18, 1.0));
+  m.position.set(x, 0.35, z); m.castShadow = true; m.receiveShadow = true; berm.add(m);
+}
+bermWall(-19, 0, 0.8, 40); bermWall(19, 0, 0.8, 40);
+bermWall(0, -19, 40, 0.8);
+// back wall behind pen (split for opening already handled by gate)
+bermWall(-12, 14.2, 14, 0.8); bermWall(12, 14.2, 14, 0.8);
+bermWall(0, 21, 16, 0.8);
+
+// =====================================================================
+//  CONTACT SHADOW helper
+// =====================================================================
+const shadowTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(32, 32, 2, 32, 32, 32);
+  g.addColorStop(0, 'rgba(0,0,0,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
+function contactShadow(radius) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(radius * 2, radius * 2),
+    new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, opacity: 0.55 }));
+  m.rotation.x = -PI / 2; m.position.y = 0.02; m.renderOrder = 1;
+  return m;
+}
+
+// =====================================================================
+//  CHARACTER BUILDERS (primitive Groups)
+// =====================================================================
+function buildCat() {
+  const g = new THREE.Group();
+  // body
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.28, 6, 12), M.fur);
+  body.rotation.x = PI / 2; body.position.set(0, 0.34, -0.02); body.castShadow = true;
+  g.add(body);
+  const belly = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 0.22, 6, 10), M.furBelly);
+  belly.rotation.x = PI / 2; belly.position.set(0, 0.27, 0.04); g.add(belly);
+
+  // head
+  const head = new THREE.Group(); head.position.set(0, 0.52, 0.26); g.add(head);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.2, 18, 16), M.fur);
+  skull.scale.set(1, 0.92, 0.96); skull.castShadow = true; head.add(skull);
+  // ears
+  for (const sx of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.16, 4), M.fur);
+    ear.position.set(sx * 0.12, 0.18, -0.02); ear.rotation.set(0.1, 0, -sx * 0.35); ear.castShadow = true;
+    head.add(ear);
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.1, 4), M.pink);
+    inner.position.set(sx * 0.12, 0.17, 0.0); inner.rotation.set(0.1, 0, -sx * 0.35);
+    head.add(inner);
+  }
+  // muzzle + nose
+  const muz = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), M.furBelly);
+  muz.scale.set(1.3, 0.8, 0.8); muz.position.set(0, -0.04, 0.16); head.add(muz);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), M.pink);
+  nose.position.set(0, -0.02, 0.24); head.add(nose);
+  // eyes
+  const eyes = [];
+  for (const sx of [-1, 1]) {
+    const e = new THREE.Mesh(G.eyeW, M.eyeW); e.position.set(sx * 0.09, 0.04, 0.16); e.scale.set(1.1, 1.3, 1); head.add(e);
+    const p = new THREE.Mesh(G.pupil, M.dark); p.position.set(sx * 0.09, 0.04, 0.22); head.add(p); eyes.push(p);
+  }
+  // whiskers
+  for (const sx of [-1, 1]) for (const yy of [-0.02, -0.06]) {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.002, 0.26, 4), M.dark);
+    w.position.set(sx * 0.18, yy, 0.16); w.rotation.set(0, 0, PI / 2 + sx * 0.2); head.add(w);
+  }
+  // tail (chain of nested groups)
+  const tailSegs = [];
+  let parent = g; let base = new THREE.Group(); base.position.set(0, 0.36, -0.3); g.add(base); parent = base;
+  for (let i = 0; i < 5; i++) {
+    const seg = new THREE.Group(); seg.position.set(0, 0, -0.12);
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.07 - i * 0.009, 8, 8), i === 4 ? M.furBelly : M.fur);
+    m.castShadow = true; seg.add(m); parent.add(seg); parent = seg; tailSegs.push(seg);
+  }
+  // legs
+  const legs = [];
+  const legPos = [[-0.13, 0.18], [0.13, 0.18], [-0.13, -0.16], [0.13, -0.16]];
+  for (const [lx, lz] of legPos) {
+    const hip = new THREE.Group(); hip.position.set(lx, 0.22, lz); g.add(hip);
+    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.16, 4, 8), M.fur);
+    leg.position.y = -0.11; leg.castShadow = true; hip.add(leg);
+    const paw = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), M.furBelly);
+    paw.position.y = -0.2; hip.add(paw);
+    legs.push(hip);
+  }
+  // carried food (hidden by default)
+  const carry = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.16, 4, 8), M.fish);
+  carry.rotation.z = PI / 2; carry.position.set(0, 0.92, 0.1); carry.visible = false; g.add(carry);
+
+  const sh = contactShadow(0.4); g.add(sh);
+  g.userData = { head, eyes, tailSegs, tailBase: base, legs, carry, sh, base: g };
+  return g;
+}
+
+function buildHippo() {
+  const g = new THREE.Group();
+  // lower body
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1.3, 22, 18), M.hippo);
+  body.scale.set(1.55, 1.05, 1.4); body.position.y = 1.2; body.castShadow = true; g.add(body);
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(1.05, 18, 14), M.hippoBelly);
+  belly.scale.set(1.4, 0.9, 1.1); belly.position.set(0, 1.0, 0.55); g.add(belly);
+
+  // head group (front, +z)
+  const head = new THREE.Group(); head.position.set(0, 1.5, 1.5); g.add(head);
+  const snout = new THREE.Mesh(new THREE.SphereGeometry(0.85, 18, 14), M.hippo);
+  snout.scale.set(1.2, 0.85, 1.05); snout.castShadow = true; head.add(snout);
+  // upper-lip block forms top of mouth
+  const upper = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.45, 0.9), M.hippo);
+  upper.position.set(0, -0.1, 0.55); head.add(upper);
+  // mouth interior
+  const mouthIn = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.6, 0.85), M.mouthIn);
+  mouthIn.position.set(0, -0.35, 0.55); head.add(mouthIn);
+  // lower jaw (pivot at back hinge)
+  const jaw = new THREE.Group(); jaw.position.set(0, -0.45, 0.15); head.add(jaw);
+  const jawMesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.4, 0.95), M.hippo);
+  jawMesh.position.set(0, 0, 0.5); jawMesh.castShadow = true; jaw.add(jawMesh);
+  for (const sx of [-0.45, 0.45]) {
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.22, 0.18), M.teeth);
+    tooth.position.set(sx, 0.22, 0.9); jaw.add(tooth);
+  }
+  // nostrils
+  for (const sx of [-0.28, 0.28]) {
+    const n = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), M.dark);
+    n.position.set(sx, 0.28, 1.0); head.add(n);
+  }
+  // ears
+  for (const sx of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 10), M.hippo);
+    ear.scale.set(1, 1.2, 0.7); ear.position.set(sx * 0.55, 0.7, -0.3); ear.castShadow = true; head.add(ear);
+    const inner = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), M.pink);
+    inner.position.set(sx * 0.55, 0.72, -0.22); head.add(inner);
+  }
+  // eyes (big), pupils offsettable
+  const pupils = [];
+  for (const sx of [-1, 1]) {
+    const stalk = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 14), M.eyeW);
+    stalk.position.set(sx * 0.45, 0.55, 0.35); head.add(stalk);
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 10), M.dark);
+    p.position.set(sx * 0.45, 0.55, 0.58); head.add(p); pupils.push(p);
+  }
+  // legs
+  for (const [lx, lz] of [[-0.8, 0.8], [0.8, 0.8], [-0.8, -0.7], [0.8, -0.7]]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.34, 0.7, 12), M.hippo);
+    leg.position.set(lx, 0.35, lz); leg.castShadow = true; g.add(leg);
+  }
+  // tail (the splash actor) pivot at rump (-z)
+  const tail = new THREE.Group(); tail.position.set(0, 1.2, -1.7); g.add(tail);
+  const tailMesh = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.1, 10), M.hippo);
+  tailMesh.rotation.x = -PI / 2.4; tailMesh.position.set(0, 0, -0.4); tailMesh.castShadow = true; tail.add(tailMesh);
+  const tailTip = new THREE.Object3D(); tailTip.position.set(0, 0, -0.9); tail.add(tailTip);
+
+  // a per-level spotlight (night) attached to head
+  const spot = new THREE.SpotLight(0xfff0c0, 0.0, 26, d2r(28), 0.5, 1.2);
+  spot.position.set(0, 1.4, 0.4); spot.target.position.set(0, 0, -8);
+  head.add(spot); head.add(spot.target);
+
+  const sh = contactShadow(1.7); g.add(sh);
+  g.userData = { head, jaw, pupils, tail, tailTip, body, belly, spot };
+  return g;
+}
+
+function buildMouse() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.13, 6, 10), M.mGrey);
+  body.rotation.x = PI / 2; body.position.y = 0.13; body.castShadow = true; g.add(body);
+  const head = new THREE.Group(); head.position.set(0, 0.18, 0.12); g.add(head);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 12), M.mGrey); head.add(skull);
+  for (const sx of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 12), M.mGrey);
+    ear.scale.set(1, 1, 0.25); ear.position.set(sx * 0.11, 0.1, 0); head.add(ear);
+    const inner = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 10), M.pink);
+    inner.scale.set(1, 1, 0.25); inner.position.set(sx * 0.11, 0.1, 0.02); head.add(inner);
+  }
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.12, 8), M.pink);
+  nose.rotation.x = PI / 2; nose.position.set(0, -0.02, 0.12); head.add(nose);
+  for (const sx of [-1, 1]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), M.dark);
+    e.position.set(sx * 0.045, 0.02, 0.09); head.add(e);
+  }
+  // tail
+  let parent = g; const tb = new THREE.Group(); tb.position.set(0, 0.12, -0.16); g.add(tb); parent = tb;
+  for (let i = 0; i < 4; i++) {
+    const seg = new THREE.Group(); seg.position.set(0, 0, -0.1);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.01, 0.1, 5), M.pink);
+    m.rotation.x = PI / 2; seg.add(m); parent.add(seg); parent = seg;
+  }
+  const sh = contactShadow(0.22); g.add(sh);
+  g.userData = { head, nose, body };
+  return g;
+}
+
+function buildGate() {
+  const g = new THREE.Group();
+  for (const sx of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.28, 3.0, 0.28), M.wood);
+    post.position.set(sx * 1.4, 1.5, 0); post.castShadow = true; g.add(post);
+  }
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.32, 0.3), M.wood);
+  beam.position.set(0, 3.0, 0); beam.castShadow = true; g.add(beam);
+  // swinging panel pivoting at left post
+  const pivot = new THREE.Group(); pivot.position.set(-1.4, 0.05, 0); g.add(pivot);
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.5, 0.1), M.woodDark);
+  panel.position.set(1.3, 1.3, 0); panel.castShadow = true; pivot.add(panel);
+  // slats
+  for (let i = 0; i < 3; i++) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.12, 0.14), M.wood);
+    slat.position.set(1.3, 0.6 + i * 0.7, 0.04); pivot.add(slat);
+  }
+  g.userData = { pivot };
+  return g;
+}
+
+// =====================================================================
+//  Instantiate world characters
+// =====================================================================
+const cat = buildCat(); scene.add(cat);
+const gus = buildHippo(); gus.position.set(0, 0, GUS_Z); scene.add(gus);
+const mouse = buildMouse(); mouse.position.set(0, 0, MOUSE_Z); scene.add(mouse);
+// mouse mound
+const mound = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 12), mat(0x5a4326, 1.0));
+mound.scale.set(1, 0.4, 1); mound.position.set(0, 0, MOUSE_Z); mound.castShadow = true; mound.receiveShadow = true; scene.add(mound);
+mouse.position.y = 0.32;
+const gate = buildGate(); gate.position.set(0, 0, GATE_Z); scene.add(gate);
+
+// food bowl
+const bowl = new THREE.Group();
+const bowlMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.35, 0.25, 16, 1, true), mat(0x3a2c18, 0.9, { side: THREE.DoubleSide }));
+bowlMesh.position.y = 0.15; bowl.add(bowlMesh);
+const bowlFood = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.3, 6, 10), M.fish);
+bowlFood.rotation.z = PI / 2; bowlFood.position.y = 0.22; bowl.add(bowlFood);
+bowl.position.copy(BOWL); scene.add(bowl);
+
+// thrown food projectile (reused)
+const proj = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.26, 6, 10), M.fish);
+proj.rotation.z = PI / 2; proj.visible = false; scene.add(proj);
+
+// decoy (reused)
+const decoy = new THREE.Group();
+const decoyBox = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.4), M.cardboard);
+decoyBox.position.y = 0.35; decoy.add(decoyBox);
+const decoyFace = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), M.fur);
+decoyFace.position.set(0, 0.6, 0.18); decoy.add(decoyFace);
+decoy.visible = false; scene.add(decoy);
+
+// =====================================================================
+//  MUCK PARTICLE POOL
+// =====================================================================
+const PCOUNT = 320;
+const blobTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.5, 'rgba(255,255,255,0.65)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
+const pGeo = new THREE.BufferGeometry();
+const pPos = new Float32Array(PCOUNT * 3);
+const pCol = new Float32Array(PCOUNT * 3);
+for (let i = 0; i < PCOUNT; i++) { pPos[i * 3 + 1] = -1000; }
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+pGeo.setAttribute('color', new THREE.BufferAttribute(pCol, 3));
+const pMat = new THREE.PointsMaterial({ size: 0.42, map: blobTex, vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true });
+const points = new THREE.Points(pGeo, pMat); points.frustumCulled = false; scene.add(points);
+const pVel = []; const pLife = []; const pMax = [];
+for (let i = 0; i < PCOUNT; i++) { pVel.push(new THREE.Vector3()); pLife.push(0); pMax.push(1); }
+const muckColors = [[0.35, 0.26, 0.15], [0.24, 0.17, 0.09], [0.42, 0.32, 0.18]];
+function emitMuck(origin) {
+  for (let i = 0; i < PCOUNT; i++) {
+    pLife[i] = rand(0.7, 1.25); pMax[i] = pLife[i];
+    pPos[i * 3] = origin.x + rand(-0.3, 0.3);
+    pPos[i * 3 + 1] = origin.y + rand(-0.2, 0.2);
+    pPos[i * 3 + 2] = origin.z + rand(-0.3, 0.3);
+    const a = rand(0, TAU), sp = rand(1.5, 5);
+    pVel[i].set(Math.cos(a) * sp, rand(3.5, 7.5), Math.sin(a) * sp - 1.5);
+    const c = muckColors[(Math.random() * 3) | 0];
+    pCol[i * 3] = c[0]; pCol[i * 3 + 1] = c[1]; pCol[i * 3 + 2] = c[2];
+  }
+  pGeo.attributes.color.needsUpdate = true;
+}
+function updateMuck(dt) {
+  let any = false;
+  for (let i = 0; i < PCOUNT; i++) {
+    if (pLife[i] <= 0) continue;
+    any = true;
+    pLife[i] -= dt;
+    pVel[i].y -= 18 * dt;
+    pPos[i * 3] += pVel[i].x * dt;
+    pPos[i * 3 + 1] += pVel[i].y * dt;
+    pPos[i * 3 + 2] += pVel[i].z * dt;
+    if (pPos[i * 3 + 1] < 0.05 || pLife[i] <= 0) { pLife[i] = 0; pPos[i * 3 + 1] = -1000; }
+  }
+  if (any) pGeo.attributes.position.needsUpdate = true;
+}
+
+// confetti reuses a lighter version of the pool? keep separate small burst
+function emitConfetti(origin) {
+  for (let i = 0; i < PCOUNT; i++) {
+    pLife[i] = rand(0.8, 1.6); pMax[i] = pLife[i];
+    pPos[i * 3] = origin.x + rand(-0.2, 0.2);
+    pPos[i * 3 + 1] = origin.y + rand(0, 0.4);
+    pPos[i * 3 + 2] = origin.z + rand(-0.2, 0.2);
+    const a = rand(0, TAU), sp = rand(2, 6);
+    pVel[i].set(Math.cos(a) * sp, rand(5, 9), Math.sin(a) * sp);
+    const c = [Math.random(), Math.random() * 0.6 + 0.4, Math.random()];
+    pCol[i * 3] = c[0]; pCol[i * 3 + 1] = c[1]; pCol[i * 3 + 2] = c[2];
+  }
+  pGeo.attributes.color.needsUpdate = true;
+}
+
+// =====================================================================
+//  AUDIO (procedural WebAudio)
+// =====================================================================
+let actx = null, masterGain = null;
+function initAudio() {
+  if (actx) return;
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = actx.createGain(); masterGain.gain.value = 0.5; masterGain.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+function tone(freq, dur, type = 'sine', gain = 0.2, sweepTo = null, when = 0) {
+  if (!actx) return;
+  const t = actx.currentTime + when;
+  const o = actx.createOscillator(); const g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (sweepTo) o.frequency.exponentialRampToValueAtTime(Math.max(1, sweepTo), t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(masterGain); o.start(t); o.stop(t + dur + 0.03);
+}
+function noiseBurst(dur, filterFreq = 800, gain = 0.3, type = 'lowpass') {
+  if (!actx) return;
+  const t = actx.currentTime;
+  const buf = actx.createBuffer(1, Math.max(1, (actx.sampleRate * dur) | 0), actx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const src = actx.createBufferSource(); src.buffer = buf;
+  const f = actx.createBiquadFilter(); f.type = type; f.frequency.value = filterFreq;
+  const g = actx.createGain(); g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f).connect(g).connect(masterGain); src.start(t);
+}
+const SFX = {
+  step() { noiseBurst(0.06, 1400, 0.05); },
+  dash() { tone(200, 0.3, 'sawtooth', 0.18, 600); noiseBurst(0.18, 1800, 0.08); },
+  notice() { tone(420, 0.35, 'sine', 0.16, 900); },
+  windup() { tone(160, 0.4, 'sawtooth', 0.12, 70); },
+  splash() { noiseBurst(0.5, 700, 0.4); tone(300, 0.4, 'sine', 0.22, 70); },
+  munch() { noiseBurst(0.08, 500, 0.12); tone(160, 0.09, 'triangle', 0.1, 110); },
+  beep(p = 1) { tone(660 * p, 0.12, 'square', 0.16); },
+  feed() { tone(520, 0.12, 'triangle', 0.18, 700); },
+  pickup() { tone(700, 0.1, 'sine', 0.16, 1000); },
+  hungry() { tone(220, 0.3, 'sine', 0.12, 160); },
+  win() { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.4, 'triangle', 0.2, null, i * 0.12)); },
+  lose() { [330, 247, 175].forEach((f, i) => tone(f, 0.35, 'sawtooth', 0.16, null, i * 0.14)); },
+};
+
+// =====================================================================
+//  HUD references
+// =====================================================================
+const UI = {
+  hunger: document.getElementById('hunger'),
+  hungerFill: document.getElementById('hungerFill'),
+  lives: document.getElementById('lives'),
+  score: document.getElementById('score'),
+  banner: document.getElementById('banner'),
+  gateOpen: document.getElementById('gateOpen'),
+  ring: document.getElementById('ring'),
+  ringInner: document.getElementById('ringInner'),
+  tricks: document.getElementById('tricks'),
+  tFood: document.getElementById('tFood'),
+  tDash: document.getElementById('tDash'),
+  tDecoy: document.getElementById('tDecoy'),
+  toast: document.getElementById('toast'),
+  bubGus: document.getElementById('bubGus'),
+  bubMouse: document.getElementById('bubMouse'),
+  muck: document.getElementById('muck'),
+  vignette: document.getElementById('vignette'),
+};
+const screens = {
+  title: document.getElementById('titleScreen'),
+  win: document.getElementById('winScreen'),
+  over: document.getElementById('overScreen'),
+  pause: document.getElementById('pauseScreen'),
+};
+function showScreen(name) {
+  for (const k in screens) screens[k].classList.toggle('show', k === name);
+}
+
+let bannerTimer = 0;
+function showBanner(main, sub) {
+  UI.banner.innerHTML = main + (sub ? `<small>${sub}</small>` : '');
+  UI.banner.style.opacity = '1'; bannerTimer = 3.0;
+}
+let toastTimer = 0;
+function showToast(msg, dur = 3.5) {
+  UI.toast.textContent = msg; UI.toast.style.opacity = '1'; toastTimer = dur;
+}
+function setLives(n) {
+  let html = '';
+  for (let i = 0; i < LIVES_MAX; i++) html += `<span class="pip${i < n ? '' : ' lost'}">🐾</span>`;
+  UI.lives.innerHTML = html;
+}
+
+// speech bubbles
+const bub = {
+  gus: { el: UI.bubGus, t: 0, anchor: new THREE.Vector3() },
+  mouse: { el: UI.bubMouse, t: 0, anchor: new THREE.Vector3() },
+};
+function say(who, msg, dur = 1.6) {
+  const b = bub[who]; b.el.textContent = msg; b.t = dur; b.el.style.opacity = '1';
+}
+function updateBubbles(dt) {
+  const v = new THREE.Vector3();
+  for (const key of ['gus', 'mouse']) {
+    const b = bub[key];
+    if (b.t > 0) {
+      b.t -= dt;
+      const src = key === 'gus' ? gus : mouse;
+      v.copy(src.position); v.y += key === 'gus' ? 3.4 : 0.9;
+      v.project(camera);
+      if (v.z < 1) {
+        const x = (v.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-v.y * 0.5 + 0.5) * window.innerHeight;
+        b.el.style.left = x + 'px'; b.el.style.top = y + 'px'; b.el.style.opacity = '1';
+      } else b.el.style.opacity = '0';
+      if (b.t <= 0) b.el.style.opacity = '0';
+    }
+  }
+}
+
+// =====================================================================
+//  GAME STATE
+// =====================================================================
+const input = { f: 0, b: 0, l: 0, r: 0, dash: false, eat: false, decoy: false };
+const dashBuf = { t: 0 }, eatBuf = { t: 0 };
+
+const game = {
+  phase: 'title',   // title | play | win | over | pause
+  level: 0, lives: LIVES_MAX, score: 0,
+  splashesDodged: 0, startTime: 0, cleanRun: true,
+};
+
+const C = { // cat runtime
+  pos: SPAWN.clone(), vel: new THREE.Vector3(), yaw: 0, speed: 0,
+  dashTimer: 0, dashCD: 0, iframe: 0, lockout: 0, carrying: false, decoyCharges: 0,
+  walkPhase: 0, squash: 0, knock: new THREE.Vector3(),
+};
+const H = { // hippo runtime
+  state: 'WATCHING', stateTime: 0, yaw: PI, hunger: START_HUNGER, hungry: false,
+  suspicion: 0, randomTimer: 99, eatBeep: 0, bob: 0,
+};
+const F = { active: false, t: 0, start: new THREE.Vector3(), end: new THREE.Vector3() };
+const D = { active: false, pos: new THREE.Vector3() };
+
+// camera runtime
+const camRig = { yaw: 0, pitch: 0.5, dist: 6.8, trauma: 0, fov: 60, fovTarget: 60 };
+let freeze = 0, timeScale = 1, slowTimer = 0;
+let muck = { active: false, t: 0, dur: 1.2 };
+let curLevel = LEVELS[0];
+
+// =====================================================================
+//  LEVEL SETUP
+// =====================================================================
+function applyLevelVisuals(L) {
+  scene.background = new THREE.Color(L.sky);
+  scene.fog = new THREE.Fog(L.fog, L.fogNear, L.fogFar);
+  groundMat.color.setHex(L.grass);
+  M.reed.color.setHex(L.accent);
+  hemi.intensity = L.hemi; hemi.color.setHex(L.sky);
+  sun.intensity = L.sun; sun.color.setHex(L.sunColor);
+  moonRim.intensity = L.night ? 0.7 : 0.0;
+  gus.userData.spot.intensity = L.night ? 2.2 : 0.0;
+  UI.vignette.style.boxShadow = L.night
+    ? 'inset 0 0 260px rgba(0,0,0,0.75)'
+    : (L.name === "MUCK O'CLOCK" ? 'inset 0 0 220px rgba(40,10,0,0.4)' : 'inset 0 0 160px rgba(0,0,0,0.15)');
+}
+
+function startLevel(i) {
+  game.level = i; curLevel = LEVELS[i];
+  game.lives = LIVES_MAX;             // fresh 3 lives per yard
+  applyLevelVisuals(curLevel);
+  // reset cat
+  C.pos.copy(SPAWN); C.vel.set(0, 0, 0); C.yaw = 0; C.dashTimer = 0; C.dashCD = 0;
+  C.iframe = 0; C.lockout = 0; C.carrying = false; C.knock.set(0, 0, 0);
+  C.decoyCharges = curLevel.decoy ? 1 : 0;
+  cat.userData.carry.visible = false;
+  // reset hippo
+  H.state = 'WATCHING'; H.stateTime = 0; H.yaw = PI; H.hunger = START_HUNGER; H.hungry = false;
+  H.suspicion = 0; H.randomTimer = curLevel.randomSplash ? rand(curLevel.randomSplash[0], curLevel.randomSplash[1]) : 99;
+  gus.rotation.y = PI;
+  // camera reset behind cat
+  camRig.yaw = 0; camRig.pitch = 0.5; camRig.fov = 60; camRig.fovTarget = 60; camRig.trauma = 0;
+  // gate closed
+  gate.userData.pivot.rotation.y = 0;
+  // food / decoy
+  F.active = false; proj.visible = false; D.active = false; decoy.visible = false;
+  bowlFood.visible = true;
+  // ui
+  UI.gateOpen.style.display = 'none';
+  UI.tDecoy.classList.toggle('disabled', !curLevel.decoy);
+  game.splashesDodged = 0; game.cleanRun = true; game.startTime = clock.elapsedTime;
+  setLives(game.lives);
+  UI.score.textContent = 'SCORE ' + game.score;
+  game.phase = 'play';
+  showScreen(null);
+  showBanner('LEVEL ' + (i + 1) + ' — ' + curLevel.name);
+  // tutorial only level 1
+  if (i === 0) { tut.reset(); showToast('That smug mouse lives behind the gate. Go get it.', 4); }
+  else showToast('', 0);
+}
+
+// tutorial flags (level 1)
+const tut = {
+  started: false, near: false, splash: false, hungry: false, fed: false,
+  reset() { this.started = true; this.near = this.splash = this.hungry = this.fed = false; },
+};
+
+// =====================================================================
+//  HIPPO STATE MACHINE
+// =====================================================================
+function gusEnter(state) { H.state = state; H.stateTime = 0; }
+
+function startTurning() {
+  if (H.state !== 'WATCHING' && H.state !== 'RECOVER') return;
+  gusEnter('TURNING'); H.suspicion = 0;
+  SFX.notice(); say('gus', 'HMMM?', 0.6);
+  setTimeout(() => { if (H.state === 'TURNING') say('gus', 'NOPE.', 0.5); }, 220);
+}
+
+function doSplash() {
+  gusEnter('SPLASH');
+  SFX.splash();
+  // particles from tail tip
+  const tip = new THREE.Vector3(); gus.userData.tailTip.getWorldPosition(tip);
+  emitMuck(tip);
+  // overlay + shake + hitstop
+  muck.active = true; muck.t = 0; muck.dur = curLevel.night ? 1.8 : 1.2;
+  camRig.trauma = 1.0; freeze = 0.06; camRig.fovTarget = 55;
+  spawnDrips();
+  // gate slam
+  gate.userData.pivot.rotation.y = 0;
+  // hit check: cat in field & not safe & not iframe
+  const throughGate = C.pos.z > GATE_Z - GATE_GRACE;
+  if (!throughGate && C.iframe <= 0) {
+    if (D.active) {
+      D.active = false; decoy.visible = false; say('gus', 'A DECOY?!', 0.8);
+      showToast('Decoy splashed! Nice trick.', 2);
+    } else {
+      // take the hit
+      game.lives--; game.cleanRun = false; setLives(game.lives);
+      say('gus', "job's a job.", 1.2);
+      const toSpawn = new THREE.Vector3(SPAWN.x - C.pos.x, 0, SPAWN.z - C.pos.z).normalize();
+      C.knock.copy(toSpawn).multiplyScalar(KNOCK);
+      C.lockout = LOCKOUT; C.iframe = IFRAME;
+      mouseTaunt('hit');
+      if (!tut.splash && game.level === 0) { tut.splash = true; showToast('SPLAT! Mud to the face. Back off when he eyes you.', 4); }
+      if (game.lives <= 0) { gameOver('muck'); return; }
+    }
+  } else {
+    game.splashesDodged++;
+  }
+}
+
+function feed() {
+  gusEnter('EATING');
+  H.hungry = false; H.hunger = 100; UI.hunger.classList.remove('hangry');
+  C.dashCD = 0; SFX.feed();
+  say('gus', 'om nom nom', 1.2);
+  // gate opens (animate via state)
+  if (!tut.fed && game.level === 0) { tut.fed = true; showToast('GO GO GO — 2 seconds! DASH through the gate!', 3); }
+  H.eatBeep = 0;
+}
+
+function updateHippo(dt) {
+  H.stateTime += dt;
+  H.bob += dt;
+
+  // hunger drains except while eating
+  if (H.state !== 'EATING') {
+    H.hunger = Math.max(0, H.hunger - curLevel.hungerDrain * dt);
+    const wasHungry = H.hungry;
+    H.hungry = H.hunger <= HUNGRY_AT;
+    if (H.hungry && !wasHungry) {
+      UI.hunger.classList.add('hangry'); SFX.hungry(); say('gus', 'urrrgh… snacky…', 1.4);
+      if (!tut.hungry && game.level === 0) { tut.hungry = true; showToast("He's HANGRY! Grab the glowing food, then press E near him.", 4.5); }
+    }
+  }
+
+  const cd = new THREE.Vector2(C.pos.x - gus.position.x, C.pos.z - gus.position.z);
+  const distGus = cd.length();
+
+  switch (H.state) {
+    case 'WATCHING': {
+      H.yaw = lerpAngle(H.yaw, PI, expt(dt, 0.12));
+      // detection
+      const gateDist = Math.hypot(C.pos.x, C.pos.z - GATE_Z);
+      const axisAng = Math.acos(clamp((-cd.y) / (distGus || 1), -1, 1)); // angle from -z field axis
+      const inCone = distGus < curLevel.coneRange && axisAng < curLevel.coneHalf;
+      const inRing = distGus < RING;
+      const fast = C.speed > SPEED_THRESH;
+      if (gateDist < PUNISH && C.iframe <= 0) {
+        startTurning();
+      } else if (inCone && inRing && fast) {
+        H.suspicion += dt;
+        if (!tut.near && game.level === 0 && H.suspicion > 0.08) { tut.near = true; showToast('WATCH OUT — Gus is turning around!', 3); }
+        if (H.suspicion >= SUSPICION) startTurning();
+      } else {
+        H.suspicion = Math.max(0, H.suspicion - dt * 2);
+      }
+      // random unprovoked splash
+      if (curLevel.randomSplash) {
+        H.randomTimer -= dt;
+        if (H.randomTimer <= 0) { startTurning(); H.randomTimer = rand(curLevel.randomSplash[0], curLevel.randomSplash[1]); }
+      }
+      // pupils track cat
+      trackPupils(distGus, cd);
+      // idle bob
+      gus.userData.body.position.y = 1.2 + Math.sin(H.bob * 2) * 0.03;
+      jawTo(0, dt);
+      break;
+    }
+    case 'TURNING': {
+      const t = clamp(H.stateTime / curLevel.turnWindup, 0, 1);
+      H.yaw = lerpAngle(PI, 0, smoothstep(t));
+      gus.userData.tail.rotation.y = -smoothstep(t) * 0.9; // cock back
+      if (H.stateTime >= curLevel.turnWindup) doSplash();
+      break;
+    }
+    case 'SPLASH': {
+      // tail whip
+      const t = clamp(H.stateTime / 0.18, 0, 1);
+      gus.userData.tail.rotation.y = lerp(0.9, -1.2, t);
+      if (H.stateTime >= SPLASH_DUR) gusEnter('RECOVER');
+      break;
+    }
+    case 'RECOVER': {
+      H.yaw = lerpAngle(H.yaw, PI, expt(dt, 0.1));
+      gus.userData.tail.rotation.y = lerpAngle(gus.userData.tail.rotation.y, 0, expt(dt, 0.1));
+      if (H.stateTime >= RECOVER_DUR) { gusEnter('WATCHING'); say('gus', 'back to WORK.', 0.8); }
+      break;
+    }
+    case 'EATING': {
+      H.yaw = lerpAngle(H.yaw, PI, expt(dt, 0.1)); // faces field while eating
+      // jaw chomp ~6Hz
+      const open = (Math.sin(H.stateTime * 38) * 0.5 + 0.5) * 0.9;
+      jawTo(open, dt, true);
+      gus.userData.head.rotation.x = Math.sin(H.stateTime * 19) * 0.08;
+      // beeps in final 0.5s
+      const left = EAT_DUR - H.stateTime;
+      if (left < 0.5 && H.stateTime - H.eatBeep > 0.16) { H.eatBeep = H.stateTime; SFX.beep(1 + (0.5 - left)); }
+      else if (left >= 0.5 && H.stateTime - H.eatBeep > 0.28) { H.eatBeep = H.stateTime; SFX.munch(); }
+      if (H.stateTime >= EAT_DUR) { gus.userData.head.rotation.x = 0; jawTo(0, dt); doSplash(); }
+      break;
+    }
+  }
+  gus.rotation.y = H.yaw;
+
+  // gate animation: open during EATING
+  const targetOpen = (H.state === 'EATING') ? clamp(H.stateTime / 0.25, 0, 1) * (PI * 0.62) : 0;
+  gate.userData.pivot.rotation.y = lerpAngle(gate.userData.pivot.rotation.y, -targetOpen, expt(dt, H.state === 'EATING' ? 0.07 : 0.04));
+
+  // hangry visual pulse
+  if (H.hungry) {
+    const p = Math.sin(clock.elapsedTime * 6) * 0.5 + 0.5;
+    M.hippo.emissive.setRGB(0.0, p * 0.09, 0.0);
+    gus.userData.belly.scale.setScalar(0.9 + Math.sin(clock.elapsedTime * 9) * 0.04 + 0.04);
+  } else {
+    M.hippo.emissive.setRGB(0, 0, 0);
+    gus.userData.belly.scale.setScalar(1);
+  }
+}
+
+function jawTo(open, dt, instant = false) {
+  const tgt = -open * 1.1;
+  gus.userData.jaw.rotation.x = instant ? tgt : lerpAngle(gus.userData.jaw.rotation.x, tgt, expt(dt, 0.08));
+}
+function trackPupils(distGus, cd) {
+  const off = clamp(cd.x / 8, -0.6, 0.6) * 0.08;
+  for (const p of gus.userData.pupils) p.position.x = (p.position.x < 0 ? -0.45 : 0.45) + off;
+}
+
+// =====================================================================
+//  CAT UPDATE
+// =====================================================================
+function updateCat(dt) {
+  // camera-relative move basis
+  const fwd = new THREE.Vector3(Math.sin(camRig.yaw), 0, Math.cos(camRig.yaw));
+  const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
+  let ix = input.r - input.l, iz = input.f - input.b;
+  if (joy.active) { ix = joy.ax; iz = -joy.ay; }   // analog stick: up = forward, partial = creep
+  const move = new THREE.Vector3();
+  if (C.lockout <= 0) {
+    move.addScaledVector(right, ix).addScaledVector(fwd, iz);
+    if (move.lengthSq() > 1) move.normalize();
+  }
+
+  // dash trigger (buffered)
+  if (dashBuf.t > 0 && C.dashTimer <= 0 && C.dashCD <= 0 && C.lockout <= 0) {
+    C.dashTimer = DASH_TIME; C.dashCD = DASH_CD; dashBuf.t = 0;
+    SFX.dash(); camRig.fovTarget = 68; C.squash = -0.18;
+    C.dashDir = (move.lengthSq() > 0.01) ? move.clone().normalize()
+      : new THREE.Vector3(Math.sin(C.yaw), 0, Math.cos(C.yaw));
+  }
+
+  if (C.dashTimer > 0) {
+    C.dashTimer -= dt;
+    C.vel.copy(C.dashDir).multiplyScalar(DASH_SPEED);
+    if (C.dashTimer <= 0) camRig.fovTarget = 60;
+  } else {
+    const target = move.clone().multiplyScalar(RUN);
+    const a = move.lengthSq() > 0.01 ? ACCEL : FRICTION;
+    C.vel.x = moveToward(C.vel.x, target.x, a * dt);
+    C.vel.z = moveToward(C.vel.z, target.z, a * dt);
+  }
+  if (C.dashCD > 0) C.dashCD -= dt;
+
+  // knockback impulse decays
+  if (C.knock.lengthSq() > 0.01) {
+    C.pos.addScaledVector(C.knock, dt);
+    C.knock.multiplyScalar(1 - expt(dt, 0.18));
+    if (C.knock.lengthSq() < 0.04) C.knock.set(0, 0, 0);
+  }
+  if (C.lockout > 0) C.lockout -= dt;
+  if (C.iframe > 0) C.iframe -= dt;
+
+  // integrate
+  const prevZ = C.pos.z;
+  C.pos.addScaledVector(C.vel, dt);
+
+  // gate wall collision: the slot is SOLID unless Gus is EATING (gate swung open).
+  // This is what forces the feed-and-dash mechanic — you cannot just walk through.
+  if (prevZ < GATE_Z && C.pos.z >= GATE_Z) {
+    const gateIsOpen = (H.state === 'EATING');
+    if (Math.abs(C.pos.x) > 1.25 || !gateIsOpen) {
+      C.pos.z = GATE_Z - 0.2; if (C.vel.z > 0) C.vel.z = 0;
+    }
+  }
+  // bounds
+  if (C.pos.z < GATE_Z) { C.pos.x = clamp(C.pos.x, -18, 18); C.pos.z = clamp(C.pos.z, -18, GATE_Z - 0.05); }
+  else { C.pos.x = clamp(C.pos.x, -6, 6); C.pos.z = clamp(C.pos.z, GATE_Z, 20.5); }
+
+  C.speed = C.vel.length();
+  cat.position.copy(C.pos);
+
+  // facing
+  if (move.lengthSq() > 0.02 || C.dashTimer > 0) {
+    const dir = C.dashTimer > 0 ? C.dashDir : move;
+    const targetYaw = Math.atan2(dir.x, dir.z);
+    C.yaw = lerpAngle(C.yaw, targetYaw, expt(dt, 0.07));
+  }
+  cat.rotation.y = C.yaw;
+
+  // i-frame blink
+  cat.visible = !(C.iframe > 0 && Math.floor(clock.elapsedTime * 14) % 2 === 0);
+
+  // animation: legs + tail + squash
+  C.walkPhase += C.speed * dt * 2.2;
+  const stride = Math.min(C.speed / RUN, 1.3);
+  cat.userData.legs.forEach((hip, i) => {
+    hip.rotation.x = Math.sin(C.walkPhase + (i % 2) * PI) * 0.5 * stride;
+  });
+  cat.userData.tailSegs.forEach((seg, i) => {
+    seg.rotation.y = Math.sin(clock.elapsedTime * 4 - i * 0.6) * 0.15;
+    seg.rotation.x = -0.2 + Math.sin(clock.elapsedTime * 3 - i * 0.5) * 0.08;
+  });
+  // idle breathing + squash recovery
+  C.squash = lerp(C.squash, 0, expt(dt, 0.12));
+  const breathe = Math.sin(clock.elapsedTime * 3) * 0.02;
+  cat.scale.set(1 - C.squash * 0.6, 1 + C.squash + breathe, 1 + C.squash * 0.6);
+
+  // footsteps
+  if (C.speed > 1.5 && C.dashTimer <= 0) {
+    C._step = (C._step || 0) + dt;
+    if (C._step > 0.22) { C._step = 0; SFX.step(); }
+  }
+
+  // auto pickup at bowl
+  if (!C.carrying && bowlFood.visible && C.pos.distanceTo(BOWL) < 1.4) {
+    C.carrying = true; cat.userData.carry.visible = true; bowlFood.visible = false;
+    SFX.pickup(); say('mouse', "ooh he's fetching. cute.", 1.5);
+    setTimeout(() => { bowlFood.visible = true; }, 1500);
+  }
+}
+
+// =====================================================================
+//  FOOD / DECOY / TRICKS
+// =====================================================================
+function tryEat() {
+  if (F.active) return;
+  if (C.carrying) {
+    const dist = Math.hypot(C.pos.x - gus.position.x, C.pos.z - gus.position.z);
+    if (dist < FEED_RANGE) {
+      // throw
+      C.carrying = false; cat.userData.carry.visible = false;
+      F.active = true; F.t = 0;
+      F.start.set(C.pos.x, 0.9, C.pos.z);
+      F.end.set(0, 0.6, GUS_Z - 3.2);
+      proj.visible = true;
+      SFX.dash();
+    } else { showToast('Get closer to Gus to feed him.', 1.6); }
+  } else if (C.pos.distanceTo(BOWL) < 2.0 && bowlFood.visible) {
+    C.carrying = true; cat.userData.carry.visible = true; bowlFood.visible = false; SFX.pickup();
+  } else {
+    showToast('Grab the glowing food from the bowl first.', 1.6);
+  }
+}
+function updateFood(dt) {
+  if (!F.active) return;
+  F.t += dt / 0.6;
+  if (F.t >= 1) {
+    F.active = false; proj.visible = false;
+    // resolve
+    if (H.hungry && (H.state === 'WATCHING' || H.state === 'RECOVER')) {
+      feed();
+    } else {
+      say('gus', H.hungry ? '...mid-spin, try again!' : 'not hungry. rude.', 1.4);
+      noiseBurst(0.12, 400, 0.18);
+    }
+    return;
+  }
+  proj.position.lerpVectors(F.start, F.end, F.t);
+  proj.position.y += 4 * 2.2 * F.t * (1 - F.t);
+  proj.rotation.x += dt * 12;
+}
+function tryDecoy() {
+  if (!curLevel.decoy || C.decoyCharges <= 0 || D.active) return;
+  C.decoyCharges--; D.active = true; D.pos.copy(C.pos);
+  decoy.position.copy(C.pos); decoy.visible = true;
+  SFX.pickup(); say('mouse', 'a cardboard cat? seriously?', 1.5);
+}
+
+// =====================================================================
+//  CAMERA
+// =====================================================================
+const tmpTarget = new THREE.Vector3();
+function updateCamera(dt) {
+  // auto-trail yaw toward movement when moving and not dragging
+  if (!dragging && look.id === null && C.speed > 1.2 && C.dashTimer <= 0) {
+    const moveYaw = Math.atan2(C.vel.x, C.vel.z);
+    camRig.yaw = lerpAngle(camRig.yaw, moveYaw, expt(dt, 0.5));
+  }
+  const fwd = new THREE.Vector3(Math.sin(camRig.yaw), 0, Math.cos(camRig.yaw));
+  tmpTarget.copy(C.pos); tmpTarget.y += 1.2;
+  const horiz = camRig.dist * Math.cos(camRig.pitch);
+  const desired = new THREE.Vector3(
+    tmpTarget.x - fwd.x * horiz,
+    tmpTarget.y + camRig.dist * Math.sin(camRig.pitch),
+    tmpTarget.z - fwd.z * horiz
+  );
+  camera.position.lerp(desired, expt(dt, 0.18));
+  camera.lookAt(tmpTarget);
+
+  // fov
+  camRig.fov = lerp(camRig.fov, camRig.fovTarget, expt(dt, 0.12));
+  if (Math.abs(camera.fov - camRig.fov) > 0.01) { camera.fov = camRig.fov; camera.updateProjectionMatrix(); }
+  if (camRig.fovTarget === 55 && muck.t > 0.3) camRig.fovTarget = 60;
+
+  // trauma shake (applied after lookAt)
+  if (camRig.trauma > 0) {
+    camRig.trauma = Math.max(0, camRig.trauma - dt * 1.0);
+    const s = camRig.trauma * camRig.trauma;
+    camera.rotation.x += (Math.random() - 0.5) * 0.12 * s;
+    camera.rotation.y += (Math.random() - 0.5) * 0.14 * s;
+    camera.rotation.z += (Math.random() - 0.5) * 0.10 * s;
+  }
+}
+
+// =====================================================================
+//  MOUSE TAUNTS
+// =====================================================================
+const TAUNTS = {
+  cocky: ['Too slow, fur-face!', 'You smell like LOSER from here.', 'Gus! Your nemesis approaches~ lol',
+    'Was that a *pounce*? Adorable.', 'I have snacks AND a couch back here.'],
+  hit: ['Did the wittle kitty get muddy?', 'OOH so close! ...not really.', 'He LIVES for this, you know.'],
+  close: ['wait. WAIT—', 'Oh no he\'s actually—', 'GUS! GUUUS WAKE UP!'],
+};
+let tauntTimer = 6;
+function mouseTaunt(kind) {
+  const arr = TAUNTS[kind] || TAUNTS.cocky;
+  say('mouse', arr[(Math.random() * arr.length) | 0], 2.2);
+  tauntTimer = rand(5, 9);
+}
+function updateTaunts(dt) {
+  tauntTimer -= dt;
+  const distMouse = C.pos.distanceTo(mouse.position);
+  if (H.state === 'EATING' && distMouse < 9 && Math.random() < dt * 1.2) { mouseTaunt('close'); return; }
+  if (tauntTimer <= 0) mouseTaunt('cocky');
+}
+
+// =====================================================================
+//  WIN / LOSE
+// =====================================================================
+function checkWin() {
+  if (game.phase !== 'play') return;
+  if (C.pos.distanceTo(mouse.position) < 1.4) winLevel();
+}
+function fmtTime(s) { const m = (s / 60) | 0; const ss = (s % 60).toFixed(0).padStart(2, '0'); return m + ':' + ss; }
+function winLevel() {
+  game.phase = 'win';
+  freeze = 0.12; slowTimer = 0.6; timeScale = 0.35;
+  SFX.win();
+  emitConfetti(mouse.position.clone().setY(1.2));
+  say('mouse', '...wait—', 1.5);
+  const margin = EAT_DUR - H.stateTime;
+  let pts = 100 + Math.max(0, Math.round(margin * 25)) + (game.cleanRun ? 25 : 0);
+  game.score += pts;
+  const last = game.level >= LEVELS.length - 1;
+  document.getElementById('winTitle').textContent = last ? 'LEGEND!' : 'GOTCHA!';
+  document.getElementById('winText').textContent = last
+    ? 'MOUSE: CAUGHT. LEGEND: YOU. Gus has filed a complaint.'
+    : 'You caught the mouse. Gus is FURIOUS.';
+  document.getElementById('winStats').innerHTML =
+    `+${pts} pts &nbsp;·&nbsp; splashes dodged: ${game.splashesDodged} &nbsp;·&nbsp; total score: ${game.score}`;
+  document.getElementById('nextBtn').style.display = last ? 'none' : '';
+  document.getElementById('againBtn').textContent = last ? 'PLAY AGAIN' : 'REPLAY';
+  setTimeout(() => { showScreen('win'); timeScale = 1; }, 700);
+}
+function gameOver(cause) {
+  game.phase = 'over';
+  SFX.lose();
+  document.getElementById('overText').textContent = cause === 'muck'
+    ? 'Fully mucked. You are 90% swamp now.' : 'The mouse waited you out.';
+  document.getElementById('overStats').innerHTML = `Reached: Level ${game.level + 1} — ${curLevel.name} &nbsp;·&nbsp; Score: ${game.score}`;
+  showScreen('over');
+}
+
+// =====================================================================
+//  HUD UPDATE
+// =====================================================================
+function updateHUD(dt) {
+  UI.hungerFill.style.width = H.hunger + '%';
+  // gate-open countdown
+  if (H.state === 'EATING') {
+    UI.gateOpen.style.display = 'block';
+    const left = Math.max(0, EAT_DUR - H.stateTime);
+    UI.ringInner.textContent = left.toFixed(1);
+    UI.ring.style.setProperty('--p', (left / EAT_DUR * 100) + '%');
+  } else UI.gateOpen.style.display = 'none';
+  // trick cooldowns
+  UI.tDash.querySelector('.cool').style.height = (C.dashCD > 0 ? (C.dashCD / DASH_CD * 100) : 0) + '%';
+  UI.tFood.classList.toggle('hot', H.hungry && C.carrying);
+  UI.tDecoy.classList.toggle('disabled', !curLevel.decoy || C.decoyCharges <= 0);
+  // banner / toast fade
+  if (bannerTimer > 0) { bannerTimer -= dt; if (bannerTimer <= 0) UI.banner.style.opacity = '0'; }
+  if (toastTimer > 0) { toastTimer -= dt; if (toastTimer <= 0) UI.toast.style.opacity = '0'; }
+  // bowl glow pulse
+  bowlFood.material.emissiveIntensity = 0.4 + Math.sin(clock.elapsedTime * 4) * 0.3;
+  UI.score.textContent = 'SCORE ' + game.score;
+  // touch button states
+  if (isTouch) {
+    document.getElementById('btnDash').classList.toggle('cooling', C.dashCD > 0);
+    document.getElementById('btnFood').classList.toggle('hot', H.hungry && C.carrying);
+    document.getElementById('btnDecoy').classList.toggle('disabled', !curLevel.decoy || C.decoyCharges <= 0);
+  }
+}
+function updateMuckOverlay(rawDt) {
+  if (!muck.active) { return; }
+  muck.t += rawDt;
+  let o;
+  if (muck.t < 0.12) o = (muck.t / 0.12) * 0.85;
+  else { const k = (muck.t - 0.12) / (muck.dur - 0.12); o = 0.85 * (1 - k); }
+  if (muck.t >= muck.dur) { o = 0; muck.active = false; }
+  UI.muck.style.opacity = Math.max(0, o);
+}
+let dripEls = [];
+function spawnDrips() {
+  for (const d of dripEls) d.remove(); dripEls = [];
+  for (let i = 0; i < 8; i++) {
+    const d = document.createElement('div'); d.className = 'drip';
+    const s = rand(40, 140);
+    d.style.width = s + 'px'; d.style.height = s + 'px';
+    d.style.left = rand(0, 100) + '%'; d.style.top = rand(0, 100) + '%';
+    d.style.transform = 'translate(-50%,-50%)';
+    UI.muck.appendChild(d); dripEls.push(d);
+  }
+  setTimeout(() => { for (const d of dripEls) d.remove(); dripEls = []; }, (muck.dur * 1000) | 0);
+}
+
+// mouse idle + decoy + food animation
+function updateProps(dt) {
+  // mouse nervous bob + nose twitch
+  mouse.userData.body && (mouse.position.y = 0.32 + Math.abs(Math.sin(clock.elapsedTime * 9)) * 0.05);
+  mouse.userData.nose.rotation.z = Math.sin(clock.elapsedTime * 22) * 0.3;
+  mouse.rotation.y = Math.sin(clock.elapsedTime * 1.5) * 0.4; // looking around
+  // bowl bob
+  bowlFood.position.y = 0.22 + Math.sin(clock.elapsedTime * 3) * 0.03;
+}
+
+// =====================================================================
+//  MAIN LOOP
+// =====================================================================
+const clock = new THREE.Clock();
+function loop() {
+  requestAnimationFrame(loop);
+  const rawDt = Math.min(clock.getDelta(), 1 / 30);
+
+  updateMuckOverlay(rawDt);
+  updateBubbles(rawDt);
+
+  if (game.phase === 'play') {
+    // decay input buffers
+    if (dashBuf.t > 0) dashBuf.t -= rawDt;
+    let dt = rawDt;
+    if (freeze > 0) { freeze -= rawDt; dt = 0; }
+    if (slowTimer > 0) { slowTimer -= rawDt; timeScale = 0.35; } else timeScale = 1;
+    dt *= timeScale;
+
+    updateCat(dt);
+    updateHippo(dt);
+    updateFood(dt);
+    updateProps(dt);
+    updateTaunts(dt);
+    checkWin();
+    updateCamera(dt);
+    updateHUD(rawDt);
+    updateMuck(dt);
+  } else {
+    // keep camera & particles alive on menus
+    updateCamera(rawDt);
+    updateMuck(rawDt);
+    updateProps(rawDt);
+  }
+
+  renderer.render(scene, camera);
+}
+
+// =====================================================================
+//  INPUT
+// =====================================================================
+const keymap = {
+  KeyW: 'f', ArrowUp: 'f', KeyS: 'b', ArrowDown: 'b',
+  KeyA: 'l', ArrowLeft: 'l', KeyD: 'r', ArrowRight: 'r',
+};
+window.addEventListener('keydown', e => {
+  if (keymap[e.code]) { input[keymap[e.code]] = 1; e.preventDefault(); }
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'Space') { dashBuf.t = 0.15; e.preventDefault(); }
+  if (e.code === 'KeyE') { if (game.phase === 'play') tryEat(); }
+  if (e.code === 'KeyQ') { if (game.phase === 'play') tryDecoy(); }
+  if (e.code === 'KeyR') { if (game.phase === 'play' || game.phase === 'over') restartLevel(); }
+  if (e.code === 'Escape') { togglePause(); }
+});
+window.addEventListener('keyup', e => { if (keymap[e.code]) input[keymap[e.code]] = 0; });
+
+// right-drag camera
+let dragging = false, lastX = 0, lastY = 0;
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+renderer.domElement.addEventListener('mousedown', e => { if (e.button === 2) { dragging = true; lastX = e.clientX; lastY = e.clientY; } });
+window.addEventListener('mouseup', e => { if (e.button === 2) dragging = false; });
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  camRig.yaw -= (e.clientX - lastX) * 0.0045;
+  camRig.pitch = clamp(camRig.pitch - (e.clientY - lastY) * 0.0045, 0.12, 0.85);
+  lastX = e.clientX; lastY = e.clientY;
+});
+// ---------- touch controls (mobile): floating joystick + look zone + buttons ----------
+const isTouch = location.search.includes('touch') || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+if (isTouch) document.body.classList.add('touch');
+
+const joy = { id: null, ox: 0, oy: 0, ax: 0, ay: 0, active: false };
+const look = { id: null, x: 0, y: 0 };
+const joyBase = document.getElementById('joyBase');
+const joyThumb = document.getElementById('joyThumb');
+const JOY_R = 56;
+
+function tStart(e) {
+  for (const t of e.changedTouches) {
+    if (t.target.closest && t.target.closest('.touchbtn, .btn')) continue; // buttons handle themselves
+    if (joy.id === null && t.clientX < window.innerWidth * 0.46) {
+      joy.id = t.identifier; joy.ox = t.clientX; joy.oy = t.clientY; joy.active = true;
+      joyBase.style.left = t.clientX + 'px'; joyBase.style.top = t.clientY + 'px';
+      joyBase.style.display = 'block'; joyThumb.style.transform = 'translate(-50%,-50%)';
+    } else if (look.id === null) {
+      look.id = t.identifier; look.x = t.clientX; look.y = t.clientY;
+    }
+  }
+}
+function tMove(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joy.id) {
+      let dx = t.clientX - joy.ox, dy = t.clientY - joy.oy;
+      const len = Math.hypot(dx, dy) || 1;
+      if (len > JOY_R) { dx *= JOY_R / len; dy *= JOY_R / len; }
+      joyThumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      joy.ax = dx / JOY_R; joy.ay = dy / JOY_R;
+    } else if (t.identifier === look.id) {
+      camRig.yaw -= (t.clientX - look.x) * 0.006;
+      camRig.pitch = clamp(camRig.pitch - (t.clientY - look.y) * 0.006, 0.12, 0.85);
+      look.x = t.clientX; look.y = t.clientY;
+    }
+  }
+  if (e.cancelable) e.preventDefault();
+}
+function tEnd(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joy.id) { joy.id = null; joy.active = false; joy.ax = joy.ay = 0; joyBase.style.display = 'none'; }
+    else if (t.identifier === look.id) { look.id = null; }
+  }
+}
+window.addEventListener('touchstart', tStart, { passive: false });
+window.addEventListener('touchmove', tMove, { passive: false });
+window.addEventListener('touchend', tEnd);
+window.addEventListener('touchcancel', tEnd);
+
+function bindBtn(id, fn) {
+  const el = document.getElementById(id);
+  el.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); fn(); }, { passive: false });
+  el.addEventListener('click', e => { e.stopPropagation(); fn(); }); // desktop / testing
+}
+bindBtn('btnDash', () => { if (game.phase === 'play') dashBuf.t = 0.15; });
+bindBtn('btnFood', () => { if (game.phase === 'play') tryEat(); });
+bindBtn('btnDecoy', () => { if (game.phase === 'play') tryDecoy(); });
+bindBtn('btnPause', () => { togglePause(); });
+
+// =====================================================================
+//  FLOW: pause / restart / buttons
+// =====================================================================
+function togglePause() {
+  if (game.phase === 'play') { game.phase = 'pause'; showScreen('pause'); }
+  else if (game.phase === 'pause') { game.phase = 'play'; showScreen(null); }
+}
+function restartLevel() { game.lives = LIVES_MAX; startLevel(game.level); }
+
+document.getElementById('startBtn').addEventListener('click', () => { initAudio(); game.lives = LIVES_MAX; game.score = 0; startLevel(0); });
+document.getElementById('nextBtn').addEventListener('click', () => { startLevel(Math.min(game.level + 1, LEVELS.length - 1)); });
+document.getElementById('againBtn').addEventListener('click', () => {
+  const last = game.level >= LEVELS.length - 1;
+  if (last) { game.lives = LIVES_MAX; game.score = 0; startLevel(0); }
+  else { startLevel(game.level); }
+});
+document.getElementById('retryBtn').addEventListener('click', () => { game.lives = LIVES_MAX; game.score = 0; startLevel(0); });
+document.getElementById('resumeBtn').addEventListener('click', togglePause);
+document.getElementById('restartBtn').addEventListener('click', () => { restartLevel(); });
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// =====================================================================
+//  BOOT
+// =====================================================================
+applyLevelVisuals(LEVELS[0]);
+setLives(LIVES_MAX);
+// place camera initial behind cat
+camRig.yaw = 0; camera.position.set(0, 4, -18);
+document.getElementById('loading').style.display = 'none';
+loop();
+
+// --- debug hook (only with ?debug in URL; never active for normal players) ---
+if (location.search.includes('debug')) {
+  window.__g = {
+    C, H, game, camRig, F, D, gus, cat, mouse, curLevel,
+    feed, doSplash, startTurning, startLevel,
+    setHunger: v => { H.hunger = v; H.hungry = v <= HUNGRY_AT; },
+    tp: (x, z) => { C.pos.set(x, 0, z); C.vel.set(0, 0, 0); },
+    state: () => ({ phase: game.phase, gus: H.state, st: +H.stateTime.toFixed(2), hunger: +H.hunger.toFixed(0),
+      hungry: H.hungry, carrying: C.carrying, cat: [+C.pos.x.toFixed(1), +C.pos.z.toFixed(1)],
+      camYaw: +camRig.yaw.toFixed(2), gateOpen: +gate.userData.pivot.rotation.y.toFixed(2), lives: game.lives }),
+    input,
+    dash: () => { dashBuf.t = 0.15; },
+    hud: () => { updateHUD(1 / 60); return { display: UI.gateOpen.style.display, ring: UI.ringInner.textContent, hangry: UI.hunger.classList.contains('hangry') }; },
+    // deterministic frame stepper (rAF gets throttled in a backgrounded tab)
+    sim: (frames, dt, keys) => {
+      keys = keys || {};
+      input.f = keys.f ? 1 : 0; input.b = keys.b ? 1 : 0; input.l = keys.l ? 1 : 0; input.r = keys.r ? 1 : 0;
+      dt = dt || 1 / 60;
+      for (let i = 0; i < frames; i++) {
+        if (game.phase !== 'play') break;
+        updateCat(dt); updateHippo(dt); updateFood(dt); updateTaunts(dt); checkWin();
+      }
+      input.f = input.b = input.l = input.r = 0;
+      return window.__g.state();
+    },
+  };
+}
+</script>
+</body>
+</html>
