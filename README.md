@@ -42,6 +42,7 @@ Three.js import is an absolute `https://` URL (needs an internet connection for 
 | **W A S D** / **Arrows** | Move the cat |
 | **SHIFT** or **SPACE** | Dash (your move through the open gate) |
 | **E** | Pick up / throw food (auto-picks up at the glowing bowl; press near Gus to feed) |
+| **F** | Throw a **stone** to bonk Gus (auto-picks up the glowing blue rocks; carry up to 3) |
 | **Q** | Drop a cardboard decoy (Level 2+) — Gus splashes it instead of you |
 | **Right-mouse drag** | Orbit the camera |
 | **ESC** | Pause · **R** | Retry level |
@@ -58,6 +59,13 @@ Three.js import is an absolute `https://` URL (needs an internet connection for 
    yard when he finishes, you eat muck and lose a life.
 
 The gate is **solid stone unless Gus is eating** — there is no shortcut. Feeding is the only way in.
+
+**Stones (buy more time):** glowing blue rocks lie around the yard. Grab them and throw (**F** / 🪨) at Gus:
+- **While he's eating** → a bonk adds **+1 second** to the open-gate window (up to +2s). Great when the dash is tight.
+- **While he's turning to splash** → knocks the splash right out of him (cancels it).
+- **While he's watching** → stuns him for a moment so he can't notice you.
+
+Each run also opens with a quick **intro**: the camera starts on the smug mouse taunting you — tap or press any key to skip.
 
 ## 🏞️ Three escalating yards
 

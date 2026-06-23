@@ -119,13 +119,16 @@
   #pauseScreen { background:rgba(6,8,20,0.6); }
   #loading { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
     background:#0b1026; color:#ffd479; font-weight:800; letter-spacing:3px; font-size:18px; }
-  .credit { position:fixed; bottom:8px; left:0; right:0; text-align:center; font-size:11px; opacity:.4; z-index:41; }
+  .credit { position:fixed; bottom:8px; left:0; right:0; text-align:center; font-size:11px; opacity:.55; z-index:12; pointer-events:none; }
+  #stoneHud { top:72px; left:14px; font-size:14px; font-weight:800; letter-spacing:.5px; }
+  #skipHint { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); z-index:35; font-size:12px;
+    letter-spacing:2px; opacity:.65; text-transform:uppercase; display:none; }
+  body.intro #skipHint { display:block; }
 
   /* ---------- touch controls (shown only on touch devices) ---------- */
   #touchControls { display:none; }
   body.touch #touchControls { display:block; }
   body.touch #tricks { display:none; }       /* desktop status bar redundant on touch */
-  body.touch .credit { display:none; }
   body.touch .keys { display:none; }
   body.touch #touchHint { display:block; }
   #touchHint { display:none; margin-top:14px; font-size:14px; letter-spacing:1px; opacity:.8; }
@@ -181,6 +184,7 @@
   </div>
   <div id="lives" class="panel"></div>
   <div id="score" class="panel">SCORE 0</div>
+  <div id="stoneHud" class="panel">🪨 <span id="stoneCount">0</span></div>
   <div id="banner"></div>
   <div id="gateOpen">
     <div id="ring"><div id="ringInner">2.0</div></div>
@@ -205,10 +209,12 @@
   <div id="touchBtns">
     <button class="touchbtn big" id="btnDash" aria-label="Dash">⚡<small>DASH</small></button>
     <button class="touchbtn" id="btnFood" aria-label="Food">🐟<small>FOOD</small></button>
+    <button class="touchbtn disabled" id="btnStone" aria-label="Throw stone">🪨<small>STONE</small></button>
     <button class="touchbtn disabled" id="btnDecoy" aria-label="Decoy">📦<small>DECOY</small></button>
   </div>
   <button class="touchbtn" id="btnPause" aria-label="Pause">⏸</button>
 </div>
+<div id="skipHint">tap / any key to skip</div>
 
 <!-- Title -->
 <div class="screen show" id="titleScreen">
@@ -217,8 +223,8 @@
   <div class="sub">a cat-and-mouse caper</div>
   <p>Catch the smug mouse hiding behind the gate. The only way in: wait for the hippo to get <b>HANGRY</b>, lob him a snack, and <b>dash</b> through the open gate during his 2-second munch. Get noticed and he tail-splashes the whole yard with swamp muck.</p>
   <button class="btn" id="startBtn">SNEAK IN</button>
-  <div class="keys"><b>WASD / Arrows</b> move · <b>E</b> food · <b>SHIFT / SPACE</b> dash · <b>Q</b> decoy · right-drag look</div>
-  <div id="touchHint"><b>Left thumb</b> to move (push gently to creep) · <b>buttons</b> to act · drag the right side to look</div>
+  <div class="keys"><b>WASD / Arrows</b> move · <b>E</b> food · <b>F</b> throw stone · <b>SHIFT / SPACE</b> dash · <b>Q</b> decoy · right-drag look</div>
+  <div id="touchHint"><b>Left thumb</b> to move (push gently to creep) · <b>buttons</b> to act (🪨 bonks Gus for more time) · drag right side to look</div>
   <div class="tip">Psst — the gate only opens while Gus is EATING.</div>
   <div class="author">Created by <b>Vijay Bhargav Nimmala</b> · <a href="mailto:vijaynimmala011@gmail.com">vijaynimmala011@gmail.com</a></div>
 </div>
@@ -677,6 +683,49 @@ const decoyFace = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), M.fur);
 decoyFace.position.set(0, 0.6, 0.18); decoy.add(decoyFace);
 decoy.visible = false; scene.add(decoy);
 
+// ---- in-world CREDIT SIGN (visible during gameplay) ----
+function makeCreditTexture() {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+  const x = c.getContext('2d');
+  x.fillStyle = '#5a4326'; x.fillRect(0, 0, 1024, 512);
+  x.fillStyle = '#6b4f2e'; x.fillRect(30, 30, 964, 452);
+  x.strokeStyle = '#3c2c18'; x.lineWidth = 14; x.strokeRect(30, 30, 964, 452);
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = '#ffe9c0'; x.font = 'bold 52px "Trebuchet MS", Verdana, sans-serif';
+  x.fillText('Created by', 512, 148);
+  x.fillStyle = '#fff8ee'; x.font = 'bold 72px "Trebuchet MS", Verdana, sans-serif';
+  x.fillText('Vijay Bhargav Nimmala', 512, 268);
+  x.fillStyle = '#ffd479'; x.font = '40px "Trebuchet MS", Verdana, sans-serif';
+  x.fillText('vijaynimmala011@gmail.com', 512, 378);
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
+}
+const creditTex = makeCreditTexture();
+const sign = new THREE.Group();
+const signBoard = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.7),
+  new THREE.MeshStandardMaterial({ map: creditTex, emissive: 0xffffff, emissiveMap: creditTex, emissiveIntensity: 0.45, roughness: 0.9, side: THREE.DoubleSide }));
+signBoard.position.y = 2.0; sign.add(signBoard);
+const signFrame = new THREE.Mesh(new THREE.BoxGeometry(3.7, 2.0, 0.12), M.wood);
+signFrame.position.set(0, 2.0, -0.08); signFrame.castShadow = true; sign.add(signFrame);
+for (const sx of [-1.5, 1.5]) {
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.2, 0.2), M.woodDark);
+  post.position.set(sx, 1.1, -0.08); post.castShadow = true; sign.add(post);
+}
+sign.position.set(-8.5, 0, -4.5); sign.rotation.y = 2.2;
+scene.add(sign);
+
+// ---- throwable STONES (bonk Gus to buy more time at the gate) ----
+const STONE_SPOTS = [[-5, -2], [5, -3], [-3.5, 4], [6, 2.5], [0, -6.5]];
+const stoneGeo = new THREE.IcosahedronGeometry(0.26, 0);
+const stoneGlowMat = mat(0x9aa6b2, 0.55, { emissive: 0x2f6fb0, emissiveIntensity: 0.6, flatShading: true });
+const stonePickups = STONE_SPOTS.map(([x, z]) => {
+  const m = new THREE.Mesh(stoneGeo, stoneGlowMat);
+  m.position.set(x, 0.26, z); m.castShadow = true; scene.add(m);
+  return { mesh: m, active: true, respawn: 0, base: new THREE.Vector3(x, 0.26, z) };
+});
+const stoneMesh = new THREE.Mesh(stoneGeo, mat(0x8a8f96, 0.7, { flatShading: true }));
+stoneMesh.visible = false; stoneMesh.castShadow = true; scene.add(stoneMesh);
+const SP = { active: false, t: 0, start: new THREE.Vector3(), end: new THREE.Vector3() };
+
 // =====================================================================
 //  MUCK PARTICLE POOL
 // =====================================================================
@@ -880,18 +929,19 @@ const game = {
 const C = { // cat runtime
   pos: SPAWN.clone(), vel: new THREE.Vector3(), yaw: 0, speed: 0,
   dashTimer: 0, dashCD: 0, iframe: 0, lockout: 0, carrying: false, decoyCharges: 0,
-  walkPhase: 0, squash: 0, knock: new THREE.Vector3(),
+  walkPhase: 0, squash: 0, knock: new THREE.Vector3(), stones: 0,
 };
 const H = { // hippo runtime
   state: 'WATCHING', stateTime: 0, yaw: PI, hunger: START_HUNGER, hungry: false,
   suspicion: 0, randomTimer: 99, eatBeep: 0, bob: 0,
+  stun: 0, eatBonus: 0, stunAnim: 0,
 };
 const F = { active: false, t: 0, start: new THREE.Vector3(), end: new THREE.Vector3() };
 const D = { active: false, pos: new THREE.Vector3() };
 
 // camera runtime
 const camRig = { yaw: 0, pitch: 0.5, dist: 6.8, trauma: 0, fov: 60, fovTarget: 60 };
-let freeze = 0, timeScale = 1, slowTimer = 0;
+let freeze = 0, timeScale = 1, slowTimer = 0, introT = 0;
 let muck = { active: false, t: 0, dur: 1.2 };
 let curLevel = LEVELS[0];
 
@@ -924,7 +974,8 @@ function startLevel(i) {
   // reset hippo
   H.state = 'WATCHING'; H.stateTime = 0; H.yaw = PI; H.hunger = START_HUNGER; H.hungry = false;
   H.suspicion = 0; H.randomTimer = curLevel.randomSplash ? rand(curLevel.randomSplash[0], curLevel.randomSplash[1]) : 99;
-  gus.rotation.y = PI;
+  H.stun = 0; H.eatBonus = 0; H.stunAnim = 0;
+  gus.rotation.y = PI; gus.userData.head.rotation.set(0, 0, 0);
   // camera reset behind cat
   camRig.yaw = 0; camRig.pitch = 0.5; camRig.fov = 60; camRig.fovTarget = 60; camRig.trauma = 0;
   // gate closed
@@ -932,18 +983,56 @@ function startLevel(i) {
   // food / decoy
   F.active = false; proj.visible = false; D.active = false; decoy.visible = false;
   bowlFood.visible = true;
+  C.stones = 0; SP.active = false; stoneMesh.visible = false;
+  stonePickups.forEach(p => { p.active = true; p.respawn = 0; p.mesh.visible = true; });
   // ui
   UI.gateOpen.style.display = 'none';
   UI.tDecoy.classList.toggle('disabled', !curLevel.decoy);
   game.splashesDodged = 0; game.cleanRun = true; game.startTime = clock.elapsedTime;
   setLives(game.lives);
   UI.score.textContent = 'SCORE ' + game.score;
-  game.phase = 'play';
+  // start with the mouse intro cinematic
+  game.phase = 'intro'; introT = 0; document.body.classList.add('intro');
   showScreen(null);
   showBanner('LEVEL ' + (i + 1) + ' — ' + curLevel.name);
+  say('mouse', MOUSE_INTRO[i % MOUSE_INTRO.length], 3.2);
   // tutorial only level 1
   if (i === 0) { tut.reset(); showToast('That smug mouse lives behind the gate. Go get it.', 4); }
   else showToast('', 0);
+}
+
+const MOUSE_INTRO = ['Catch me if you can, fur-face! 🐭', 'Bet you a cheese wheel you never get past Gus~', "Oh good, the slow kitty is back. This'll be fun."];
+
+// intro cinematic: open on the mouse taunting, then sweep behind the cat
+function updateIntro(dt) {
+  introT += dt;
+  const DUR = 2.7, BLEND = 1.9;
+  const mouseHead = mouse.position.clone(); mouseHead.y = 0.7;
+  // excited mouse wiggle, facing the camera
+  mouse.position.y = 0.32 + Math.abs(Math.sin(clock.elapsedTime * 11)) * 0.08;
+  mouse.rotation.y = PI + Math.sin(clock.elapsedTime * 9) * 0.3;
+  mouse.userData.nose.rotation.z = Math.sin(clock.elapsedTime * 26) * 0.4;
+  // close shot of the mouse, slow push-in
+  const camA = new THREE.Vector3(mouse.position.x + 2.8, 2.1, mouse.position.z - 4.0);
+  const camB = new THREE.Vector3(mouse.position.x + 1.3, 1.4, mouse.position.z - 2.6);
+  // gameplay follow target (same math as updateCamera)
+  const fwd = new THREE.Vector3(Math.sin(camRig.yaw), 0, Math.cos(camRig.yaw));
+  const catTarget = C.pos.clone(); catTarget.y += 1.2;
+  const horiz = camRig.dist * Math.cos(camRig.pitch);
+  const catCam = new THREE.Vector3(catTarget.x - fwd.x * horiz, catTarget.y + camRig.dist * Math.sin(camRig.pitch), catTarget.z - fwd.z * horiz);
+  if (introT < BLEND) {
+    camera.position.lerpVectors(camA, camB, smoothstep(introT / BLEND));
+    camera.lookAt(mouseHead);
+  } else {
+    const e = smoothstep(clamp((introT - BLEND) / (DUR - BLEND), 0, 1));
+    camera.position.lerpVectors(camB, catCam, e);
+    camera.lookAt(new THREE.Vector3().lerpVectors(mouseHead, catTarget, e));
+    if (introT >= DUR) endIntro();
+  }
+}
+function endIntro() {
+  if (game.phase !== 'intro') return;
+  game.phase = 'play'; document.body.classList.remove('intro');
 }
 
 // tutorial flags (level 1)
@@ -1005,12 +1094,13 @@ function feed() {
   say('gus', 'om nom nom', 1.2);
   // gate opens (animate via state)
   if (!tut.fed && game.level === 0) { tut.fed = true; showToast('GO GO GO — 2 seconds! DASH through the gate!', 3); }
-  H.eatBeep = 0;
+  H.eatBeep = 0; H.eatBonus = 0;
 }
 
 function updateHippo(dt) {
   H.stateTime += dt;
   H.bob += dt;
+  if (H.stun > 0) H.stun -= dt;
 
   // hunger drains except while eating
   if (H.state !== 'EATING') {
@@ -1029,25 +1119,27 @@ function updateHippo(dt) {
   switch (H.state) {
     case 'WATCHING': {
       H.yaw = lerpAngle(H.yaw, PI, expt(dt, 0.12));
-      // detection
-      const gateDist = Math.hypot(C.pos.x, C.pos.z - GATE_Z);
-      const axisAng = Math.acos(clamp((-cd.y) / (distGus || 1), -1, 1)); // angle from -z field axis
-      const inCone = distGus < curLevel.coneRange && axisAng < curLevel.coneHalf;
-      const inRing = distGus < RING;
-      const fast = C.speed > SPEED_THRESH;
-      if (gateDist < PUNISH && C.iframe <= 0) {
-        startTurning();
-      } else if (inCone && inRing && fast) {
-        H.suspicion += dt;
-        if (!tut.near && game.level === 0 && H.suspicion > 0.08) { tut.near = true; showToast('WATCH OUT — Gus is turning around!', 3); }
-        if (H.suspicion >= SUSPICION) startTurning();
-      } else {
-        H.suspicion = Math.max(0, H.suspicion - dt * 2);
-      }
-      // random unprovoked splash
-      if (curLevel.randomSplash) {
-        H.randomTimer -= dt;
-        if (H.randomTimer <= 0) { startTurning(); H.randomTimer = rand(curLevel.randomSplash[0], curLevel.randomSplash[1]); }
+      if (H.stun <= 0) {              // a stunned (bonked) Gus can't notice or splash
+        // detection
+        const gateDist = Math.hypot(C.pos.x, C.pos.z - GATE_Z);
+        const axisAng = Math.acos(clamp((-cd.y) / (distGus || 1), -1, 1)); // angle from -z field axis
+        const inCone = distGus < curLevel.coneRange && axisAng < curLevel.coneHalf;
+        const inRing = distGus < RING;
+        const fast = C.speed > SPEED_THRESH;
+        if (gateDist < PUNISH && C.iframe <= 0) {
+          startTurning();
+        } else if (inCone && inRing && fast) {
+          H.suspicion += dt;
+          if (!tut.near && game.level === 0 && H.suspicion > 0.08) { tut.near = true; showToast('WATCH OUT — Gus is turning around!', 3); }
+          if (H.suspicion >= SUSPICION) startTurning();
+        } else {
+          H.suspicion = Math.max(0, H.suspicion - dt * 2);
+        }
+        // random unprovoked splash
+        if (curLevel.randomSplash) {
+          H.randomTimer -= dt;
+          if (H.randomTimer <= 0) { startTurning(); H.randomTimer = rand(curLevel.randomSplash[0], curLevel.randomSplash[1]); }
+        }
       }
       // pupils track cat
       trackPupils(distGus, cd);
@@ -1082,15 +1174,23 @@ function updateHippo(dt) {
       const open = (Math.sin(H.stateTime * 38) * 0.5 + 0.5) * 0.9;
       jawTo(open, dt, true);
       gus.userData.head.rotation.x = Math.sin(H.stateTime * 19) * 0.08;
-      // beeps in final 0.5s
-      const left = EAT_DUR - H.stateTime;
+      // beeps in final 0.5s (window length can be extended by stone bonks)
+      const total = EAT_DUR + H.eatBonus;
+      const left = total - H.stateTime;
       if (left < 0.5 && H.stateTime - H.eatBeep > 0.16) { H.eatBeep = H.stateTime; SFX.beep(1 + (0.5 - left)); }
       else if (left >= 0.5 && H.stateTime - H.eatBeep > 0.28) { H.eatBeep = H.stateTime; SFX.munch(); }
-      if (H.stateTime >= EAT_DUR) { gus.userData.head.rotation.x = 0; jawTo(0, dt); doSplash(); }
+      if (H.stateTime >= total) { gus.userData.head.rotation.x = 0; jawTo(0, dt); doSplash(); }
       break;
     }
   }
   gus.rotation.y = H.yaw;
+  // bonk wobble (stone hit)
+  if (H.stunAnim > 0) {
+    H.stunAnim -= dt;
+    gus.userData.head.rotation.z = Math.sin(clock.elapsedTime * 40) * 0.2 * Math.max(0, H.stunAnim / 0.5);
+  } else if (H.state !== 'EATING') {
+    gus.userData.head.rotation.z = lerpAngle(gus.userData.head.rotation.z, 0, expt(dt, 0.1));
+  }
 
   // gate animation: open during EATING
   const targetOpen = (H.state === 'EATING') ? clamp(H.stateTime / 0.25, 0, 1) * (PI * 0.62) : 0;
@@ -1217,6 +1317,13 @@ function updateCat(dt) {
     SFX.pickup(); say('mouse', "ooh he's fetching. cute.", 1.5);
     setTimeout(() => { bowlFood.visible = true; }, 1500);
   }
+  // auto pickup stones (carry up to 3)
+  for (const p of stonePickups) {
+    if (p.active && C.stones < 3 && C.pos.distanceTo(p.base) < 1.4) {
+      p.active = false; p.mesh.visible = false; p.respawn = 9; C.stones++;
+      SFX.pickup();
+    }
+  }
 }
 
 // =====================================================================
@@ -1264,6 +1371,54 @@ function tryDecoy() {
   C.decoyCharges--; D.active = true; D.pos.copy(C.pos);
   decoy.position.copy(C.pos); decoy.visible = true;
   SFX.pickup(); say('mouse', 'a cardboard cat? seriously?', 1.5);
+}
+
+function tryStone() {
+  if (SP.active) return;
+  if (C.stones <= 0) { showToast('No stones! Grab the glowing blue rocks.', 1.4); return; }
+  C.stones--;
+  SP.active = true; SP.t = 0;
+  SP.start.set(C.pos.x, 0.7, C.pos.z);
+  SP.end.set(gus.position.x, 1.5, gus.position.z + 1.0);
+  stoneMesh.visible = true; stoneMesh.position.copy(SP.start);
+  tone(300, 0.18, 'square', 0.12, 520);
+}
+function updateStone(dt) {
+  // ground pickups: glow + respawn
+  for (const p of stonePickups) {
+    if (p.active) {
+      p.mesh.visible = true;
+      p.mesh.position.y = p.base.y + Math.sin(clock.elapsedTime * 3 + p.base.x) * 0.07;
+      p.mesh.rotation.y += dt * 0.8;
+    } else if (p.respawn > 0) {
+      p.respawn -= dt;
+      if (p.respawn <= 0) { p.active = true; p.mesh.visible = true; }
+    }
+  }
+  stoneGlowMat.emissiveIntensity = 0.5 + Math.sin(clock.elapsedTime * 4) * 0.25;
+  // thrown stone
+  if (!SP.active) return;
+  SP.t += dt / 0.5;
+  if (SP.t >= 1) { SP.active = false; stoneMesh.visible = false; stoneHit(); return; }
+  stoneMesh.position.lerpVectors(SP.start, SP.end, SP.t);
+  stoneMesh.position.y += 4 * 1.8 * SP.t * (1 - SP.t);
+  stoneMesh.rotation.x += dt * 18; stoneMesh.rotation.z += dt * 13;
+}
+function stoneHit() {
+  H.stunAnim = 0.5; noiseBurst(0.1, 600, 0.22); SFX.beep(1.7);
+  say('gus', 'OW! my SNOUT!', 1.1);
+  if (H.state === 'EATING') {
+    H.eatBonus = Math.min(H.eatBonus + 1.0, 2.0);
+    showToast('BONK! +1s — more time to slip through!', 1.6);
+  } else if (H.state === 'TURNING') {
+    gusEnter('WATCHING'); H.stun = 1.6; H.suspicion = 0;
+    showToast('BONK! You knocked the splash right out of him!', 1.9);
+  } else if (H.state === 'WATCHING' || H.state === 'RECOVER') {
+    H.stun = 1.8;
+    showToast('BONK! Gus is seeing stars — move!', 1.6);
+  } else {
+    showToast('Too late — he already splashed.', 1.1);
+  }
 }
 
 // =====================================================================
@@ -1369,9 +1524,10 @@ function updateHUD(dt) {
   // gate-open countdown
   if (H.state === 'EATING') {
     UI.gateOpen.style.display = 'block';
-    const left = Math.max(0, EAT_DUR - H.stateTime);
+    const total = EAT_DUR + H.eatBonus;
+    const left = Math.max(0, total - H.stateTime);
     UI.ringInner.textContent = left.toFixed(1);
-    UI.ring.style.setProperty('--p', (left / EAT_DUR * 100) + '%');
+    UI.ring.style.setProperty('--p', (left / total * 100) + '%');
   } else UI.gateOpen.style.display = 'none';
   // trick cooldowns
   UI.tDash.querySelector('.cool').style.height = (C.dashCD > 0 ? (C.dashCD / DASH_CD * 100) : 0) + '%';
@@ -1383,10 +1539,13 @@ function updateHUD(dt) {
   // bowl glow pulse
   bowlFood.material.emissiveIntensity = 0.4 + Math.sin(clock.elapsedTime * 4) * 0.3;
   UI.score.textContent = 'SCORE ' + game.score;
+  document.getElementById('stoneCount').textContent = C.stones;
   // touch button states
   if (isTouch) {
     document.getElementById('btnDash').classList.toggle('cooling', C.dashCD > 0);
     document.getElementById('btnFood').classList.toggle('hot', H.hungry && C.carrying);
+    document.getElementById('btnStone').classList.toggle('disabled', C.stones <= 0);
+    document.getElementById('btnStone').classList.toggle('hot', C.stones > 0 && H.state === 'EATING');
     document.getElementById('btnDecoy').classList.toggle('disabled', !curLevel.decoy || C.decoyCharges <= 0);
   }
 }
@@ -1445,12 +1604,18 @@ function loop() {
     updateCat(dt);
     updateHippo(dt);
     updateFood(dt);
+    updateStone(dt);
     updateProps(dt);
     updateTaunts(dt);
     checkWin();
     updateCamera(dt);
     updateHUD(rawDt);
     updateMuck(dt);
+  } else if (game.phase === 'intro') {
+    // mouse intro cinematic (camera handled inside updateIntro)
+    updateIntro(rawDt);
+    updateStone(rawDt);
+    updateMuck(rawDt);
   } else {
     // keep camera & particles alive on menus
     updateCamera(rawDt);
@@ -1469,9 +1634,11 @@ const keymap = {
   KeyA: 'l', ArrowLeft: 'l', KeyD: 'r', ArrowRight: 'r',
 };
 window.addEventListener('keydown', e => {
+  if (game.phase === 'intro') { if (introT > 0.4) endIntro(); return; }
   if (keymap[e.code]) { input[keymap[e.code]] = 1; e.preventDefault(); }
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'Space') { dashBuf.t = 0.15; e.preventDefault(); }
   if (e.code === 'KeyE') { if (game.phase === 'play') tryEat(); }
+  if (e.code === 'KeyF') { if (game.phase === 'play') tryStone(); }
   if (e.code === 'KeyQ') { if (game.phase === 'play') tryDecoy(); }
   if (e.code === 'KeyR') { if (game.phase === 'play' || game.phase === 'over') restartLevel(); }
   if (e.code === 'Escape') { togglePause(); }
@@ -1500,6 +1667,7 @@ const joyThumb = document.getElementById('joyThumb');
 const JOY_R = 56;
 
 function tStart(e) {
+  if (game.phase === 'intro') { if (introT > 0.4) endIntro(); return; }
   for (const t of e.changedTouches) {
     if (t.target.closest && t.target.closest('.touchbtn, .btn')) continue; // buttons handle themselves
     if (joy.id === null && t.clientX < window.innerWidth * 0.46) {
@@ -1545,8 +1713,11 @@ function bindBtn(id, fn) {
 }
 bindBtn('btnDash', () => { if (game.phase === 'play') dashBuf.t = 0.15; });
 bindBtn('btnFood', () => { if (game.phase === 'play') tryEat(); });
+bindBtn('btnStone', () => { if (game.phase === 'play') tryStone(); });
 bindBtn('btnDecoy', () => { if (game.phase === 'play') tryDecoy(); });
 bindBtn('btnPause', () => { togglePause(); });
+// click/tap anywhere skips the intro cinematic
+window.addEventListener('pointerdown', () => { if (game.phase === 'intro' && introT > 0.4) endIntro(); });
 
 // =====================================================================
 //  FLOW: pause / restart / buttons
@@ -1593,8 +1764,10 @@ if (location.search.includes('debug')) {
     tp: (x, z) => { C.pos.set(x, 0, z); C.vel.set(0, 0, 0); },
     state: () => ({ phase: game.phase, gus: H.state, st: +H.stateTime.toFixed(2), hunger: +H.hunger.toFixed(0),
       hungry: H.hungry, carrying: C.carrying, cat: [+C.pos.x.toFixed(1), +C.pos.z.toFixed(1)],
-      camYaw: +camRig.yaw.toFixed(2), gateOpen: +gate.userData.pivot.rotation.y.toFixed(2), lives: game.lives }),
-    input,
+      camYaw: +camRig.yaw.toFixed(2), gateOpen: +gate.userData.pivot.rotation.y.toFixed(2), lives: game.lives,
+      stones: C.stones, stun: +H.stun.toFixed(2), eatBonus: +H.eatBonus.toFixed(2) }),
+    input, endIntro, tryStone, tryEat,
+    giveStones: n => { C.stones = n; },
     dash: () => { dashBuf.t = 0.15; },
     hud: () => { updateHUD(1 / 60); return { display: UI.gateOpen.style.display, ring: UI.ringInner.textContent, hangry: UI.hunger.classList.contains('hangry') }; },
     // deterministic frame stepper (rAF gets throttled in a backgrounded tab)
@@ -1604,7 +1777,7 @@ if (location.search.includes('debug')) {
       dt = dt || 1 / 60;
       for (let i = 0; i < frames; i++) {
         if (game.phase !== 'play') break;
-        updateCat(dt); updateHippo(dt); updateFood(dt); updateTaunts(dt); checkWin();
+        updateCat(dt); updateHippo(dt); updateFood(dt); updateStone(dt); updateTaunts(dt); checkWin();
       }
       input.f = input.b = input.l = input.r = 0;
       return window.__g.state();
