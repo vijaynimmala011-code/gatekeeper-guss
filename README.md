@@ -1,5 +1,7 @@
 # 🐱 GATEKEEPER GUS — A Cat-and-Mouse Caper
 
+**Created by Vijay Bhargav Nimmala** · [vijaynimmala011@gmail.com](mailto:vijaynimmala011@gmail.com)
+
 A funny, fully-playable **3D browser game** built from your idea:
 
 > A funny-looking cat must catch a funny-looking mouse — but the mouse lives behind a
@@ -86,5 +88,6 @@ Append `?debug` to the URL to expose `window.__g` with helpers (`state()`, `sim(
 
 ---
 
-*Made with Claude Code. Muck stays tasteful — it's swamp/pond sludge (lily pads, rubber-duck energy),
-never the literal thing. Gus has filed a complaint.*
+*Created by **Vijay Bhargav Nimmala** (vijaynimmala011@gmail.com), built with Claude Code. Muck stays
+tasteful — it's swamp/pond sludge (lily pads, rubber-duck energy), never the literal thing. Gus has
+filed a complaint.*

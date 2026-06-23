@@ -111,6 +111,10 @@
   .keys b { color:#ffd479; }
   .tip { margin-top:14px; font-size:14px; color:#9bff9b; animation:blink 1.2s infinite; }
   @keyframes blink { 50%{opacity:.35} }
+  .author { margin-top:18px; font-size:13px; opacity:.78; letter-spacing:.4px; }
+  .author b { color:#fff; }
+  .author a { color:#ffd479; text-decoration:none; }
+  .author a:hover { text-decoration:underline; }
   .cat-emoji { font-size:64px; margin-bottom:4px; filter:drop-shadow(0 6px 6px rgba(0,0,0,.5)); }
   #pauseScreen { background:rgba(6,8,20,0.6); }
   #loading { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
@@ -216,6 +220,7 @@
   <div class="keys"><b>WASD / Arrows</b> move · <b>E</b> food · <b>SHIFT / SPACE</b> dash · <b>Q</b> decoy · right-drag look</div>
   <div id="touchHint"><b>Left thumb</b> to move (push gently to creep) · <b>buttons</b> to act · drag the right side to look</div>
   <div class="tip">Psst — the gate only opens while Gus is EATING.</div>
+  <div class="author">Created by <b>Vijay Bhargav Nimmala</b> · <a href="mailto:vijaynimmala011@gmail.com">vijaynimmala011@gmail.com</a></div>
 </div>
 
 <!-- Win -->
@@ -228,6 +233,7 @@
     <button class="btn" id="nextBtn">NEXT YARD</button>
     <button class="btn alt" id="againBtn">AGAIN</button>
   </div>
+  <div class="author">Created by <b>Vijay Bhargav Nimmala</b> · <a href="mailto:vijaynimmala011@gmail.com">vijaynimmala011@gmail.com</a></div>
 </div>
 
 <!-- Game over -->
@@ -237,6 +243,7 @@
   <p id="overText">Fully mucked. You are 90% swamp now.</p>
   <div class="stats" id="overStats"></div>
   <button class="btn" id="retryBtn">TRY AGAIN</button>
+  <div class="author">Created by <b>Vijay Bhargav Nimmala</b> · <a href="mailto:vijaynimmala011@gmail.com">vijaynimmala011@gmail.com</a></div>
 </div>
 
 <!-- Pause -->
@@ -249,7 +256,7 @@
   </div>
 </div>
 
-<div class="credit">Built with Three.js · WASD move · E food · SHIFT dash · ESC pause · R retry</div>
+<div class="credit">Created by Vijay Bhargav Nimmala · vijaynimmala011@gmail.com · Built with Three.js</div>
 
 <script type="module">
 // Three.js r160 loaded directly from CDN (no build step, no importmap needed)
